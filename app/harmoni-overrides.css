@@ -1,0 +1,377 @@
+/* A few shared component styles that extend the original prototype stylesheet. */
+.app {
+  min-height: 100dvh;
+}
+
+.app.welcome {
+  padding-bottom: 135px;
+}
+
+.header-tools {
+  gap: 10px;
+}
+
+.menu-heading {
+  justify-content: space-between;
+}
+
+.setup-heading {
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.setup-heading h1 {
+  flex: 1;
+  font-size: 38px;
+  margin: 0;
+}
+
+.design-cancel,
+.design-save {
+  width: auto;
+  padding: 8px 0;
+}
+
+.design-save {
+  color: #8a6720;
+  font-weight: 700;
+}
+
+.card-art {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background-color: #fbf3e6;
+}
+
+.card-art::before,
+.card-art::after,
+.card-art span {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.card-art::after {
+  inset: 0;
+  background: linear-gradient(120deg, transparent 28%, rgba(255, 255, 255, 0.35) 48%, transparent 68%);
+  mix-blend-mode: soft-light;
+}
+
+.art-0 {
+  background: repeating-linear-gradient(168deg, transparent 0 13px, rgba(180, 140, 54, 0.3) 14px, transparent 16px), linear-gradient(155deg, #fff6e2, #d6b15c 58%, #f1ddb0);
+}
+
+.art-1 {
+  background: radial-gradient(ellipse at 15% 25%, #f3c98a 0 15%, transparent 40%), radial-gradient(ellipse at 80% 28%, #f2b4c7 0 18%, transparent 44%), radial-gradient(ellipse at 48% 82%, #cdb9ff 0 20%, transparent 48%), #fff4e4;
+}
+
+.art-2 {
+  background: repeating-radial-gradient(ellipse at 50% 52%, transparent 0 9px, rgba(156, 116, 37, 0.5) 10px, transparent 11px), #fff8ea;
+}
+
+.art-3 {
+  background: repeating-conic-gradient(from -24deg at 50% 105%, rgba(201, 162, 76, 0.22) 0deg 4deg, transparent 4deg 10deg), radial-gradient(circle at 50% 100%, #fff2c8 0 27%, #e7b95c 28% 40%, transparent 41%), #fce9d2;
+}
+
+.art-4 {
+  background: radial-gradient(ellipse at 18% 24%, #d6b15c 0 3%, transparent 4%), radial-gradient(ellipse at 77% 35%, #e8a98c 0 4%, transparent 5%), radial-gradient(ellipse at 55% 78%, #b8c9a8 0 4%, transparent 5%), radial-gradient(ellipse at 86% 82%, #c7b4e8 0 5%, transparent 6%), radial-gradient(ellipse at 30% 65%, #f2d58e 0 4%, transparent 5%), #fbf3e6;
+  background-size: 68px 54px, 74px 63px, 90px 70px, 82px 64px, 96px 72px, auto;
+}
+
+.art-5 {
+  background: radial-gradient(circle at 69% 28%, #fff7dc 0 9%, #f2c97a 10% 15%, transparent 16%), linear-gradient(172deg, transparent 43%, #f2cfa8 44% 57%, #e8b98a 58% 69%, #d9a066 70% 81%, #b57b45 82%), #fdebd8;
+}
+
+.art-6 {
+  background: radial-gradient(ellipse at 52% 55%, #f0c27a 0 7%, transparent 8%), repeating-conic-gradient(from 0deg at 52% 55%, rgba(235, 167, 181, 0.52) 0deg 9deg, transparent 10deg 30deg), #fff5ec;
+  background-size: auto, 150px 150px, auto;
+  background-position: center;
+}
+
+.art-7 {
+  background: repeating-conic-gradient(from 45deg, #f4e2b4 0deg 90deg, #e9cd8c 90deg 180deg, #d9b565 180deg 270deg, #f7ead0 270deg 360deg);
+  background-size: 42px 42px;
+}
+
+.card-art span:nth-child(1) {
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 0, rgba(255, 255, 255, 0.5), transparent 55%);
+}
+
+.card-art span:nth-child(2) {
+  width: 34%;
+  height: 140%;
+  top: -20%;
+  left: 15%;
+  transform: rotate(22deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+}
+
+.card-art span:nth-child(3) {
+  width: 35%;
+  height: 35%;
+  right: -8%;
+  bottom: -12%;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+}
+
+.pa > .card-art {
+  width: 100%;
+  height: 100%;
+}
+
+.pk > .card-art {
+  width: 100%;
+  height: 100%;
+  opacity: 0.75;
+}
+
+.card-back-name {
+  font-size: 28px;
+  margin: 12px 0 2px;
+}
+
+.card-headline {
+  margin: 6px 0 0;
+  font-size: 15px;
+}
+
+.card-hint {
+  margin: 2px 0 6px;
+}
+
+.orb2 .orbit-inner {
+  width: 170px;
+  height: 170px;
+}
+
+.orb2 .orbit-outer {
+  width: 250px;
+  height: 250px;
+}
+
+.orbit-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 30px;
+  height: 30px;
+  margin: -15px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px #fff, 0 8px 14px -6px rgba(60, 40, 10, 0.5);
+}
+
+.orbit-dot-0 { transform: rotate(0deg) translateY(-85px); }
+.orbit-dot-1 { transform: rotate(120deg) translateY(-85px); }
+.orbit-dot-2 { transform: rotate(240deg) translateY(-85px); }
+.orbit-dot-3 { transform: rotate(45deg) translateY(-125px); }
+
+.contacts-title,
+.scan-title,
+.circle-title {
+  margin-top: 6px;
+}
+
+.empty-contacts {
+  padding: 26px 0 30px;
+  text-align: center;
+}
+
+.empty-contacts h1 {
+  margin-top: 0;
+  font-size: 34px;
+}
+
+.contact-date {
+  text-align: right;
+}
+
+.contact-date .dt {
+  margin-top: 8px;
+}
+
+.contact-button {
+  width: 100%;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+}
+
+.contact-name {
+  margin: 0 0 6px;
+}
+
+.contact-role {
+  font-size: 18px;
+}
+
+.contact-tags {
+  margin-top: 16px;
+}
+
+.contact-notes hr {
+  border: 0;
+  border-top: 1px solid var(--ln);
+  margin: 14px 0;
+}
+
+.contact-note-empty {
+  display: block;
+  font-size: 15px;
+}
+
+.contact-meta {
+  flex-wrap: wrap;
+  gap: 8px 22px;
+}
+
+.contact-view-card {
+  width: auto;
+  padding: 12px 22px;
+  margin: 16px 0 12px;
+}
+
+.contact-fields .ct {
+  cursor: default;
+}
+
+.contact-card-header {
+  margin-bottom: 10px;
+}
+
+.header-spacer {
+  width: 50px;
+  flex: none;
+}
+
+.email-icon { background: #0a84ff; }
+.phone-icon { background: #34c759; }
+
+.entry-title {
+  margin-top: 0;
+  font-size: 36px;
+}
+
+.design-uploads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0 0;
+}
+
+.design-uploads .pill {
+  display: inline-flex;
+  align-items: center;
+}
+
+.skill-chips {
+  margin: 10px 0;
+}
+
+.skill-chips .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.skill-chips .chip button {
+  padding: 0;
+  border: 0;
+  color: var(--mu);
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.gi:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.delete-card {
+  color: #b5482f;
+}
+
+.custom-field-icon {
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.contact-button:focus-visible {
+  outline-offset: -3px;
+}
+
+.bb .btn {
+  width: auto;
+  min-width: 0;
+  flex: 1;
+}
+
+.circle-copy {
+  margin: 12px 0;
+}
+
+.member-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.member-name {
+  font-size: 17px;
+}
+
+.member-copy {
+  margin: 12px 0 14px;
+}
+
+.circle-summary {
+  justify-content: space-between;
+}
+
+.match-badge {
+  margin-left: auto;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.card-art,
+.btn,
+.ib,
+.pill,
+.share,
+.mr,
+nav button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+[role="button"]:focus-visible,
+input:focus-visible {
+  outline: 2px solid rgba(156, 116, 37, 0.7);
+  outline-offset: 3px;
+}
+
+@media (max-width: 360px) {
+  .app { padding-right: 18px; padding-left: 18px; }
+  .xpc { padding-right: 8px; padding-left: 8px; }
+  .pf, .pk { border-radius: 26px; }
+  .pn { font-size: 36px; }
+  .design-cancel, .design-save { font-size: 14px; }
+}
