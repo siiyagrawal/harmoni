@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ConvexClientProvider } from "./components/convex-client-provider";
 import "./globals.css";
 import "./harmoni-overrides.css";
 
@@ -24,7 +25,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           rel="stylesheet"
         />
       </head>
-      <body className="w">{children}</body>
+      <body className="w">
+        <ConvexClientProvider>{children}</ConvexClientProvider>
+      </body>
     </html>
   );
 }
