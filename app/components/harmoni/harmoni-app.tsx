@@ -1,6 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { FormEvent } from "react";
+import { useAction, useMutation, useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { AppHeader, BottomNav, MenuSheet, type MenuAction } from "./navigation";
 import {
   CircleScreen,
@@ -9,6 +13,8 @@ import {
   ContactDetailScreen,
   ContactEntrySheet,
   ContactsScreen,
+  DeleteAccountSheet,
+  DemoAuthScreen,
   DesignScreen,
   DetailsScreen,
   LogoScreen,
@@ -22,6 +28,8 @@ import {
 import { INITIAL_PROFILE, type Contact, type Profile, type Tab, type View } from "./types";
 
 const STORAGE_KEY = "harmoni_demo_v1";
+const SESSION_KEY = "harmoni_demo_session";
+const USER_ID_KEY = "harmoni_demo_user_id";
 
 type PersistedState = {
   screen: View;
@@ -33,6 +41,56 @@ type PersistedState = {
   shared: boolean;
   introductions: Record<string, boolean>;
 };
+
+function toDemoCardPayload(profile: Profile, sessionToken: string, status?: "draft" | "published") {
+  const visibleFields = profile.fields.map((field, order) => ({
+    label: field.label,
+    value: field.value,
+    kind: field.id,
+    abbreviation: field.abbreviation,
+    color: field.color,
+    visible: true,
+    order,
+  }));
+
+  return {
+    sessionToken,
+    fullName: profile.name,
+    jobTitle: profile.title,
+    company: profile.company,
+    headline: profile.headline,
+    email: profile.email,
+    phone: profile.phone,
+    website: profile.fields.find((field) => field.id === "website")?.value ?? "",
+    photoStorageId: profile.photoStorageId,
+    coverStorageId: profile.coverStorageId,
+    logoStorageId: profile.logoStorageId,
+    logoMode: profile.logo === "auto" ? "auto" as const : profile.logoStorageId ? "image" as const : null,
+    squarePhoto: profile.squarePhoto,
+    circle: profile.circle,
+    wants: profile.wants,
+    haves: profile.haves,
+    qrOnBack: profile.qrOnBack,
+    includeMeetingPlace: profile.includeMeetingPlace,
+    links: profile.fields
+      .filter((field) => field.value.trim())
+      .map((field, order) => ({
+        label: field.label,
+        url: field.value,
+        kind: field.id,
+        visible: true,
+        order,
+      })),
+    fields: visibleFields,
+    theme: {
+      style: String(profile.art),
+      accentColor: "#1d5647",
+      backgroundColor: "#f8f7f2",
+      textColor: "#18352e",
+    },
+    ...(status ? { status } : {}),
+  };
+}
 
 function optimizeImage(file: File, maxDimension: number, format: "image/jpeg" | "image/png") {
   return new Promise<string>((resolve, reject) => {
@@ -60,6 +118,15 @@ function optimizeImage(file: File, maxDimension: number, format: "image/jpeg" | 
   });
 }
 
+function profileForLocalCache(profile: Profile): Profile {
+  return {
+    ...profile,
+    photo: profile.photoStorageId ? "" : profile.photo,
+    cover: profile.coverStorageId ? "" : profile.cover,
+    logo: profile.logoStorageId && profile.logo !== "auto" ? "" : profile.logo,
+  };
+}
+
 export default function HarmoniApp() {
   const [screen, setScreen] = useState<View>("welcome");
   const [returnTo, setReturnTo] = useState<View>("home");
@@ -75,31 +142,80 @@ export default function HarmoniApp() {
   const [contactView, setContactView] = useState<"detail" | "card" | null>(null);
   const [entryValue, setEntryValue] = useState("");
   const [hydrated, setHydrated] = useState(false);
-  const [sheet, setSheet] = useState<"menu" | "setup" | "tag" | "note" | null>(null);
+  const [demoSession, setDemoSession] = useState<string | null>(null);
+  const [demoUserId, setDemoUserId] = useState<Id<"users"> | null>(null);
+  const [authMode, setAuthMode] = useState<"signup" | "signin">("signup");
+  const [authUsername, setAuthUsername] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [savingCard, setSavingCard] = useState(false);
+  const [sheet, setSheet] = useState<"menu" | "setup" | "tag" | "note" | "delete-account" | null>(null);
   const [toast, setToast] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const restoredDemoUser = useRef<string | null>(null);
+  const registerDemo = useAction(api.demoAuth.register);
+  const signInDemo = useAction(api.demoAuth.signIn);
+  const logoutDemo = useMutation(api.users.logoutDemo);
+  const removeDemoAccount = useMutation(api.users.deleteDemoAccount);
+  const saveDemoProfile = useMutation(api.cards.saveDemoProfile);
+  const createDemoImageUploadUrl = useMutation(api.cards.generateDemoImageUploadUrl);
+  const demoCard = useQuery(
+    api.cards.getPrimaryDemo,
+    hydrated && demoSession ? { sessionToken: demoSession } : "skip",
+  );
+
+  async function persistDemoProfile(nextProfile: Profile, status: "draft" | "published" = "draft") {
+    if (!demoSession) throw new Error("Sign in before saving your card.");
+    const saved = await saveDemoProfile(toDemoCardPayload(nextProfile, demoSession, status));
+    return {
+      ...nextProfile,
+      photo: saved.photoUrl ?? "",
+      cover: saved.coverUrl ?? "",
+      logo: nextProfile.logo === "auto" ? "auto" : saved.logoUrl ?? "",
+    };
+  }
+
+  async function uploadProfileImage(dataUrl: string, sessionToken: string) {
+    const uploadUrl = await createDemoImageUploadUrl({ sessionToken });
+    const image = await fetch(dataUrl).then((response) => response.blob());
+    const response = await fetch(uploadUrl, {
+      method: "POST",
+      headers: { "Content-Type": image.type },
+      body: image,
+    });
+    if (!response.ok) throw new Error("The image could not be uploaded. Try again.");
+    const upload = await response.json() as { storageId: Id<"_storage"> };
+    return upload.storageId;
+  }
 
   // Restore browser-only state after hydration so the server and first client render stay identical.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const state = JSON.parse(saved) as Partial<PersistedState>;
-        if (state.profile) setProfile({ ...INITIAL_PROFILE, ...state.profile });
-        if (state.contacts) setContacts(state.contacts.map((contact) => ({
-          ...contact,
-          tags: contact.tags ?? [],
-          notes: contact.notes ?? [],
-          met: contact.met ?? "",
-          introRequested: contact.introRequested ?? false,
-        })));
-        if (typeof state.xp === "number") setXp(state.xp);
-        if (state.activeTab) setActiveTab(state.activeTab);
-        if (typeof state.shared === "boolean") setShared(state.shared);
-        if (state.introductions) setIntroductions(state.introductions);
-        if (state.screen) setScreen(state.screen === "design" ? state.returnTo ?? "home" : state.screen);
-        if (state.returnTo) setReturnTo(state.returnTo);
-        if (state.profile?.circle) setCircleName(state.profile.circle);
+      const session = localStorage.getItem(SESSION_KEY);
+      const userId = localStorage.getItem(USER_ID_KEY) as Id<"users"> | null;
+      if (session && userId) {
+        setDemoSession(session);
+        setDemoUserId(userId);
+        const saved = localStorage.getItem(`${STORAGE_KEY}_${userId}`);
+        if (saved) {
+          const state = JSON.parse(saved) as Partial<PersistedState>;
+          if (state.profile) setProfile({ ...INITIAL_PROFILE, ...state.profile });
+          if (state.contacts) setContacts(state.contacts.map((contact) => ({
+            ...contact,
+            tags: contact.tags ?? [],
+            notes: contact.notes ?? [],
+            met: contact.met ?? "",
+            introRequested: contact.introRequested ?? false,
+          })));
+          if (typeof state.xp === "number") setXp(state.xp);
+          if (state.activeTab) setActiveTab(state.activeTab);
+          if (typeof state.shared === "boolean") setShared(state.shared);
+          if (state.introductions) setIntroductions(state.introductions);
+          if (state.returnTo) setReturnTo(state.returnTo);
+          if (state.profile?.circle) setCircleName(state.profile.circle);
+        }
       }
     } catch {}
     setHydrated(true);
@@ -107,14 +223,100 @@ export default function HarmoniApp() {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
-    if (!hydrated) return;
-    const state: PersistedState = { screen, returnTo, profile, contacts, xp, activeTab, shared, introductions };
+    if (!hydrated || !demoUserId) return;
+    const state: PersistedState = {
+      screen,
+      returnTo,
+      profile: profileForLocalCache(profile),
+      contacts,
+      xp,
+      activeTab,
+      shared,
+      introductions,
+    };
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      localStorage.setItem(`${STORAGE_KEY}_${demoUserId}`, JSON.stringify(state));
     } catch {
       // The app still works when local storage is disabled or full.
     }
-  }, [activeTab, contacts, hydrated, introductions, profile, returnTo, screen, shared, xp]);
+  }, [activeTab, contacts, demoUserId, hydrated, introductions, profile, returnTo, screen, shared, xp]);
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!demoSession || !demoUserId || demoCard === undefined) return;
+    if (restoredDemoUser.current === demoUserId) return;
+    restoredDemoUser.current = demoUserId;
+    if (demoCard) {
+      const storedArt = Number.parseInt(demoCard.theme.style, 10);
+      const restoredProfile: Profile = {
+        ...INITIAL_PROFILE,
+        name: demoCard.fullName,
+        title: demoCard.jobTitle ?? "",
+        company: demoCard.company ?? "",
+        headline: demoCard.headline ?? "",
+        email: demoCard.email ?? profile.email,
+        phone: demoCard.phone ?? profile.phone,
+        photo: demoCard.photoUrl ?? profile.photo,
+        photoStorageId: demoCard.photoStorageId ?? profile.photoStorageId,
+        cover: demoCard.coverUrl ?? profile.cover,
+        coverStorageId: demoCard.coverStorageId ?? profile.coverStorageId,
+        logo: demoCard.logoMode === "auto" ? "auto" : demoCard.logoUrl ?? profile.logo,
+        logoStorageId: demoCard.logoStorageId ?? profile.logoStorageId,
+        squarePhoto: demoCard.squarePhoto ?? profile.squarePhoto,
+        circle: demoCard.circle ?? profile.circle,
+        wants: demoCard.wants ?? profile.wants,
+        haves: demoCard.haves ?? profile.haves,
+        qrOnBack: demoCard.qrOnBack ?? profile.qrOnBack,
+        includeMeetingPlace: demoCard.includeMeetingPlace ?? profile.includeMeetingPlace,
+        fields: demoCard.fields.length ? demoCard.fields.map((field) => ({
+          id: field.kind,
+          label: field.label,
+          abbreviation: field.abbreviation ?? field.kind.slice(0, 2),
+          color: field.color ?? "#1d5647",
+          value: field.value,
+        })) : profile.fields,
+        art: Number.isFinite(storedArt) ? storedArt : profile.art,
+      };
+      setProfile(restoredProfile);
+      setCircleName(restoredProfile.circle);
+      setScreen(demoCard.status === "published" ? "home" : "details");
+
+      const hasLegacyImages =
+        (restoredProfile.photo.startsWith("data:image/") && !restoredProfile.photoStorageId)
+        || (restoredProfile.cover.startsWith("data:image/") && !restoredProfile.coverStorageId)
+        || (restoredProfile.logo.startsWith("data:image/") && !restoredProfile.logoStorageId);
+      if (demoSession && (demoCard.profileVersion !== 1 || hasLegacyImages)) {
+        void (async () => {
+          const migratedProfile = { ...restoredProfile };
+          if (migratedProfile.photo.startsWith("data:image/") && !migratedProfile.photoStorageId) {
+            migratedProfile.photoStorageId = await uploadProfileImage(migratedProfile.photo, demoSession);
+          }
+          if (migratedProfile.cover.startsWith("data:image/") && !migratedProfile.coverStorageId) {
+            migratedProfile.coverStorageId = await uploadProfileImage(migratedProfile.cover, demoSession);
+          }
+          if (migratedProfile.logo.startsWith("data:image/") && !migratedProfile.logoStorageId) {
+            migratedProfile.logoStorageId = await uploadProfileImage(migratedProfile.logo, demoSession);
+          }
+          if (
+            migratedProfile.photoStorageId !== restoredProfile.photoStorageId
+            || migratedProfile.coverStorageId !== restoredProfile.coverStorageId
+            || migratedProfile.logoStorageId !== restoredProfile.logoStorageId
+          ) {
+            try {
+              setProfile(await persistDemoProfile(migratedProfile, demoCard.status === "published" ? "published" : "draft"));
+            } catch (error) {
+              setToast(error instanceof Error ? error.message : "An older card image could not be saved.");
+            }
+          }
+        })().catch(() => setToast("An older card image could not be uploaded."));
+      }
+    } else if (screen === "welcome" || screen === "auth") {
+      setScreen("details");
+    }
+  // A card query also updates while onboarding saves a draft; only use it to restore profile state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoCard, demoSession, demoUserId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     document.body.classList.toggle("w", screen === "welcome");
@@ -138,15 +340,67 @@ export default function HarmoniApp() {
   }
 
   function startCard() {
-    if (!profile.name) setProfile(INITIAL_PROFILE);
-    navigate("details");
+    setAuthMode("signup");
+    setAuthError("");
+    setAuthPassword("");
+    navigate("auth");
   }
 
-  function continueDetails() {
+  async function submitDemoAuth(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (authBusy) return;
+    setAuthBusy(true);
+    setAuthError("");
+
+    try {
+      const result = authMode === "signup"
+        ? await registerDemo({ username: authUsername, password: authPassword })
+        : await signInDemo({ username: authUsername, password: authPassword });
+
+      restoredDemoUser.current = null;
+      setDemoSession(result.sessionToken);
+      setDemoUserId(result.userId);
+      try {
+        localStorage.setItem(SESSION_KEY, result.sessionToken);
+        localStorage.setItem(USER_ID_KEY, result.userId);
+      } catch {
+        setToast("You’re signed in for this browser session.");
+      }
+      setAuthPassword("");
+      setActiveTab("card");
+      if (result.hasCard) {
+        navigate("home");
+      } else {
+        setProfile(INITIAL_PROFILE);
+        setContacts([]);
+        setXp(0);
+        navigate("details");
+      }
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "We couldn’t sign you in. Try again.");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function continueDetails() {
     if (!profile.name.trim()) {
       setToast("Add your name to continue");
       return;
     }
+    if (!demoSession) {
+      navigate("auth");
+      return;
+    }
+    setSavingCard(true);
+    try {
+      setProfile(await persistDemoProfile(profile, "draft"));
+    } catch (error) {
+      setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Your card couldn’t be saved.");
+      setSavingCard(false);
+      return;
+    }
+    setSavingCard(false);
     setCircleName((current) => current || `${profile.name.trim().split(/\s+/)[0]}'s Circle`);
     setXp((current) => Math.max(current, 100));
     navigate("logo");
@@ -154,26 +408,142 @@ export default function HarmoniApp() {
 
   function handleImage(file: File, kind: "photo" | "logo" | "cover") {
     void optimizeImage(file, kind === "cover" ? 800 : 480, kind === "logo" ? "image/png" : "image/jpeg")
-      .then((dataUrl) => {
-        setProfile((current) => ({ ...current, [kind]: dataUrl }));
+      .then(async (dataUrl) => {
+        let storageId: Id<"_storage"> | null = null;
+        if (demoSession) {
+          storageId = await uploadProfileImage(dataUrl, demoSession);
+        }
+
+        const nextProfile: Profile = kind === "photo"
+          ? { ...profile, photo: dataUrl, photoStorageId: storageId }
+          : kind === "cover"
+            ? { ...profile, cover: dataUrl, coverStorageId: storageId }
+            : { ...profile, logo: dataUrl, logoStorageId: storageId };
+        setProfile(nextProfile);
         if (kind === "photo" && !profile.photo) setXp((current) => current + 100);
+
+        if (demoSession) {
+          setSavingCard(true);
+          try {
+            const status = demoCard?.status === "published" ? "published" : "draft";
+            setProfile(await persistDemoProfile(nextProfile, status));
+          } finally {
+            setSavingCard(false);
+          }
+        }
         setToast(`${kind === "cover" ? "Cover" : kind === "photo" ? "Photo" : "Logo"} added to your card`);
       })
       .catch(() => setToast("We couldn’t use that image. Try another one."));
   }
 
-  function finishCircle() {
+  async function finishCircle() {
     const name = circleName.trim() || `${profile.name.split(/\s+/)[0]}'s Circle`;
-    setProfile((current) => ({ ...current, circle: name }));
+    const completedProfile = { ...profile, circle: name };
+    setProfile(completedProfile);
+    if (demoSession) {
+      setSavingCard(true);
+      try {
+        setProfile(await persistDemoProfile(completedProfile, "published"));
+      } catch (error) {
+        setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Your card couldn’t be saved.");
+        setSavingCard(false);
+        return;
+      }
+      setSavingCard(false);
+    }
     setCircleName(name);
     setXp((current) => current + 150);
     setActiveTab("card");
     navigate("home");
   }
 
+  async function continueLogo() {
+    setSavingCard(true);
+    try {
+      setProfile(await persistDemoProfile(profile, "draft"));
+      navigate("photo");
+    } catch (error) {
+      setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Your card couldnâ€™t be saved.");
+    } finally {
+      setSavingCard(false);
+    }
+  }
+
+  async function saveDesign() {
+    setSavingCard(true);
+    try {
+      const status = demoCard?.status === "published" ? "published" : "draft";
+      setProfile(await persistDemoProfile(profile, status));
+      navigate(returnTo);
+    } catch (error) {
+      setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Your card couldnâ€™t be saved.");
+    } finally {
+      setSavingCard(false);
+    }
+  }
+
+  async function deleteAccount() {
+    if (!demoSession) return;
+    setDeletingAccount(true);
+    try {
+      await removeDemoAccount({ sessionToken: demoSession });
+      try {
+        if (demoUserId) localStorage.removeItem(`${STORAGE_KEY}_${demoUserId}`);
+        localStorage.removeItem(SESSION_KEY);
+        localStorage.removeItem(USER_ID_KEY);
+      } catch {}
+
+      restoredDemoUser.current = null;
+      setDemoSession(null);
+      setDemoUserId(null);
+      setAuthUsername("");
+      setAuthPassword("");
+      setProfile(INITIAL_PROFILE);
+      setContacts([]);
+      setXp(0);
+      setCircleName("");
+      setShared(false);
+      setIntroductions({});
+      setContactView(null);
+      setSelectedContactName("");
+      setActiveTab("card");
+      setQuery("");
+      setSheet(null);
+      navigate("welcome");
+      setToast("Your account was deleted.");
+    } catch (error) {
+      setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Your account couldnâ€™t be deleted. Try again.");
+    } finally {
+      setDeletingAccount(false);
+    }
+  }
+
   function openDesign(from: View) {
     setReturnTo(from);
     navigate("design");
+  }
+
+  function clearDemoSession() {
+    if (demoSession) void logoutDemo({ sessionToken: demoSession }).catch(() => undefined);
+    try {
+      localStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem(USER_ID_KEY);
+    } catch {}
+    restoredDemoUser.current = null;
+    setDemoSession(null);
+    setDemoUserId(null);
+    setAuthPassword("");
+    setAuthUsername("");
+    setProfile(INITIAL_PROFILE);
+    setContacts([]);
+    setXp(0);
+    setCircleName("");
+    setShared(false);
+    setIntroductions({});
+    setContactView(null);
+    setSelectedContactName("");
+    setActiveTab("card");
+    navigate("welcome");
   }
 
   async function shareCard() {
@@ -182,7 +552,7 @@ export default function HarmoniApp() {
       setShared(true);
       setXp((current) => current + 100);
     }
-    const slug = profile.name.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const slug = demoCard?.slug || authUsername.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-") || profile.name.toLowerCase().replace(/[^a-z0-9]+/g, "");
     const url = `https://harmoni.app/c/${slug || "my-card"}`;
     try {
       if (navigator.share) {
@@ -253,19 +623,15 @@ export default function HarmoniApp() {
         setActiveTab("scan");
         break;
       case "reset":
-        try {
-          localStorage.removeItem(STORAGE_KEY);
-        } catch {}
-        setProfile(INITIAL_PROFILE);
-        setContacts([]);
-        setXp(0);
-        setActiveTab("card");
-        setCircleName("");
-        setShared(false);
-        setIntroductions({});
-        setContactView(null);
         setSheet(null);
-        navigate("welcome");
+        clearDemoSession();
+        break;
+      case "signout":
+        setSheet(null);
+        clearDemoSession();
+        break;
+      case "delete-account":
+        setSheet("delete-account");
         break;
     }
   }
@@ -296,10 +662,28 @@ export default function HarmoniApp() {
 
   return (
     <>
-      <main className={`app${screen === "welcome" ? " welcome in" : " in"}`}>
+      <main className={`app${screen === "welcome" ? " welcome in" : screen === "auth" ? " auth in" : " in"}`}>
         {screen === "welcome" ? <WelcomeScreen onStart={startCard} /> : null}
+        {screen === "auth" ? (
+          <DemoAuthScreen
+            mode={authMode}
+            username={authUsername}
+            password={authPassword}
+            error={authError}
+            busy={authBusy}
+            onUsername={setAuthUsername}
+            onPassword={setAuthPassword}
+            onSubmit={(event) => void submitDemoAuth(event)}
+            onToggleMode={() => {
+              setAuthMode((mode) => mode === "signup" ? "signin" : "signup");
+              setAuthError("");
+              setAuthPassword("");
+            }}
+            onBack={() => navigate("welcome")}
+          />
+        ) : null}
         {screen === "details" ? (
-          <DetailsScreen profile={profile} xp={xp} onChange={updateText} onBack={() => navigate("welcome")} onContinue={continueDetails} />
+          <DetailsScreen profile={profile} xp={xp} saving={savingCard} onChange={updateText} onBack={() => navigate("auth")} onContinue={() => void continueDetails()} />
         ) : null}
         {screen === "logo" ? (
           <LogoScreen
@@ -308,11 +692,11 @@ export default function HarmoniApp() {
             onBack={() => navigate("details")}
             onAuto={() => {
               if (!profile.logo) setXp((current) => current + 50);
-              setProfile((current) => ({ ...current, logo: "auto" }));
+              setProfile((current) => ({ ...current, logo: "auto", logoStorageId: null }));
             }}
             onUpload={(file) => handleImage(file, "logo")}
-            onRemove={() => setProfile((current) => ({ ...current, logo: "" }))}
-            onContinue={() => navigate("photo")}
+            onRemove={() => setProfile((current) => ({ ...current, logo: "", logoStorageId: null }))}
+            onContinue={() => void continueLogo()}
           />
         ) : null}
         {screen === "photo" ? (
@@ -347,10 +731,12 @@ export default function HarmoniApp() {
         {screen === "design" ? (
           <DesignScreen
             profile={profile}
+            saving={savingCard}
             onArt={(art) => setProfile((current) => ({ ...current, art }))}
             onUpdate={(updates) => setProfile((current) => ({ ...current, ...updates }))}
             onUpload={handleImage}
             onBack={() => navigate(returnTo)}
+            onSave={() => void saveDesign()}
             onReset={() => {
               setProfile(INITIAL_PROFILE);
               setContacts([]);
@@ -435,6 +821,9 @@ export default function HarmoniApp() {
       {screen === "home" && !contactView ? <BottomNav active={activeTab} onChange={changeTab} /> : null}
       {sheet === "menu" ? (
         <MenuSheet onDismiss={() => setSheet(null)} onAction={handleMenuAction} onShare={() => void shareCard()} />
+      ) : null}
+      {sheet === "delete-account" ? (
+        <DeleteAccountSheet busy={deletingAccount} onConfirm={() => void deleteAccount()} onDismiss={() => setSheet(null)} />
       ) : null}
       {sheet === "setup" ? (
         <SetupGuide

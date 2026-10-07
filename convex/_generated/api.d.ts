@@ -11,7 +11,9 @@
 import type * as actions from "../actions.js";
 import type * as cards from "../cards.js";
 import type * as contacts from "../contacts.js";
+import type * as demoAuth from "../demoAuth.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_demoAuthHelper from "../lib/demoAuthHelper.js";
 import type * as lib_slugs from "../lib/slugs.js";
 import type * as users from "../users.js";
 
@@ -25,7 +27,9 @@ declare const fullApi: ApiFromModules<{
   actions: typeof actions;
   cards: typeof cards;
   contacts: typeof contacts;
+  demoAuth: typeof demoAuth;
   "lib/auth": typeof lib_auth;
+  "lib/demoAuthHelper": typeof lib_demoAuthHelper;
   "lib/slugs": typeof lib_slugs;
   users: typeof users;
 }>;

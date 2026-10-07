@@ -7,6 +7,31 @@
   padding-bottom: 135px;
 }
 
+.app.auth {
+  padding-bottom: 32px;
+}
+
+.auth-actions {
+  padding-top: 8px;
+}
+
+.auth-error {
+  color: #a33b2b;
+  font-size: 14px;
+  margin: 0 0 14px;
+}
+
+.auth-switch {
+  text-align: center;
+  font-size: 14px;
+  margin-top: 22px;
+}
+
+.btn:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
 .header-tools {
   gap: 10px;
 }
@@ -295,6 +320,25 @@
 
 .delete-card {
   color: #b5482f;
+}
+
+.menu-danger {
+  color: #b5482f;
+}
+
+.menu-danger i {
+  color: #b5482f;
+  background: rgba(181, 72, 47, 0.1);
+}
+
+.account-delete-sheet {
+  max-height: 90%;
+}
+
+.delete-account-confirm {
+  margin-top: 10px;
+  color: #b5482f;
+  border-color: rgba(181, 72, 47, 0.3);
 }
 
 .custom-field-icon {

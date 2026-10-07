@@ -1,5 +1,8 @@
+import type { Id } from "../../../convex/_generated/dataModel";
+
 export type View =
   | "welcome"
+  | "auth"
   | "details"
   | "logo"
   | "photo"
@@ -18,8 +21,11 @@ export type Profile = {
   email: string;
   phone: string;
   photo: string;
+  photoStorageId: Id<"_storage"> | null;
   cover: string;
+  coverStorageId: Id<"_storage"> | null;
   logo: string;
+  logoStorageId: Id<"_storage"> | null;
   squarePhoto: boolean;
   art: number;
   circle: string;
@@ -63,8 +69,11 @@ export const INITIAL_PROFILE: Profile = {
   email: "",
   phone: "",
   photo: "",
+  photoStorageId: null,
   cover: "",
+  coverStorageId: null,
   logo: "",
+  logoStorageId: null,
   squarePhoto: false,
   art: 0,
   circle: "",

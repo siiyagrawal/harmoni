@@ -13,6 +13,8 @@ const cardField = v.object({
   label: v.string(),
   value: v.string(),
   kind: v.string(),
+  abbreviation: v.optional(v.string()),
+  color: v.optional(v.string()),
   visible: v.boolean(),
   order: v.number(),
 });
@@ -25,13 +27,34 @@ const contactNote = v.object({
 
 export default defineSchema({
   users: defineTable({
-    authSubject: v.string(),
+    authSubject: v.optional(v.string()),
+    demoUsername: v.optional(v.string()),
     email: v.optional(v.string()),
     fullName: v.optional(v.string()),
     avatarStorageId: v.optional(v.id("_storage")),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_auth_subject", ["authSubject"]),
+  })
+    .index("by_auth_subject", ["authSubject"]),
+
+  demoAccounts: defineTable({
+    userId: v.id("users"),
+    username: v.string(),
+    passwordSalt: v.string(),
+    passwordHash: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_username", ["username"])
+    .index("by_user", ["userId"]),
+
+  demoSessions: defineTable({
+    token: v.string(),
+    userId: v.id("users"),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_token", ["token"])
+    .index("by_user", ["userId"]),
 
   cards: defineTable({
     ownerId: v.id("users"),
@@ -45,6 +68,15 @@ export default defineSchema({
     website: v.optional(v.string()),
     photoStorageId: v.optional(v.id("_storage")),
     coverStorageId: v.optional(v.id("_storage")),
+    logoStorageId: v.optional(v.id("_storage")),
+    logoMode: v.optional(v.union(v.literal("auto"), v.literal("image"))),
+    squarePhoto: v.optional(v.boolean()),
+    circle: v.optional(v.string()),
+    wants: v.optional(v.array(v.string())),
+    haves: v.optional(v.array(v.string())),
+    qrOnBack: v.optional(v.boolean()),
+    includeMeetingPlace: v.optional(v.boolean()),
+    profileVersion: v.optional(v.number()),
     links: v.array(cardLink),
     fields: v.array(cardField),
     theme: v.object({
@@ -92,5 +124,7 @@ export default defineSchema({
     .index("by_owner_created_at", ["ownerId", "createdAt"])
     .index("by_owner_card", ["ownerId", "linkedCardId"])
     .index("by_owner_linked_user", ["ownerId", "linkedUserId"])
-    .index("by_owner_email", ["ownerId", "email"]),
+    .index("by_owner_email", ["ownerId", "email"])
+    .index("by_linked_card", ["linkedCardId"])
+    .index("by_linked_user", ["linkedUserId"]),
 });

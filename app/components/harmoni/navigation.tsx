@@ -54,7 +54,7 @@ export function BottomNav({ active, onChange }: { active: Tab; onChange: (tab: T
   );
 }
 
-type MenuAction = "setup" | "design" | "share" | "qr" | "signature" | "scan" | "reset";
+type MenuAction = "setup" | "design" | "share" | "qr" | "signature" | "scan" | "reset" | "signout" | "delete-account";
 const MENU_ROWS: Array<{ icon: IconName; label: string; action: MenuAction; group?: string }> = [
   { icon: "check", label: "Setup guide", action: "setup" },
   { icon: "edit", label: "Design my card", action: "design" },
@@ -63,6 +63,8 @@ const MENU_ROWS: Array<{ icon: IconName; label: string; action: MenuAction; grou
   { icon: "email", label: "Email signature", action: "signature" },
   { icon: "scan", label: "Scan a card", action: "scan", group: "Capturing information" },
   { icon: "close", label: "Start the demo over", action: "reset", group: "Demo" },
+  { icon: "close", label: "Sign out", action: "signout", group: "Account" },
+  { icon: "close", label: "Delete account", action: "delete-account" },
 ];
 
 export function MenuSheet({
@@ -89,7 +91,7 @@ export function MenuSheet({
         {MENU_ROWS.map((item) => (
           <div key={item.action}>
             {item.group ? <div className="ms">{item.group}</div> : null}
-            <button className="mr" type="button" onClick={() => onAction(item.action)}>
+            <button className={`mr${item.action === "delete-account" ? " menu-danger" : ""}`} type="button" onClick={() => onAction(item.action)}>
               <i><Icon name={item.icon} size={20} strokeWidth={1.9} /></i>
               <span>{item.label}</span>
             </button>

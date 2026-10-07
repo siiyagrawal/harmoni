@@ -113,7 +113,7 @@ export function Avatar({
 
   if (photo) {
     return (
-      // The image comes from a user-selected file and is stored as a local data URL.
+      // During upload this can be a local preview; saved cards use their Convex Storage URL.
       // eslint-disable-next-line @next/next/no-img-element
       <img className={`av${square ? " sq" : ""}`} style={style} src={photo} alt={`${name} profile`} />
     );

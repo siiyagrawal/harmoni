@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ChangeEvent, KeyboardEvent, ReactNode } from "react";
+import type { ChangeEvent, FormEvent, KeyboardEvent, ReactNode } from "react";
 import DigitalCard from "./digital-card";
 import type { Contact, Profile, ProfileField } from "./types";
 import { CARD_ARTS } from "./types";
@@ -28,7 +28,7 @@ function StepHeader({
 }
 
 function ActionFooter({ children }: { children: ReactNode }) {
-  return <div className="ft">{children}</div>;
+  return <div className="ft mt-10">{children}</div>;
 }
 
 export function WelcomeScreen({ onStart }: { onStart: () => void }) {
@@ -49,15 +49,91 @@ export function WelcomeScreen({ onStart }: { onStart: () => void }) {
   );
 }
 
+export function DemoAuthScreen({
+  mode,
+  username,
+  password,
+  error,
+  busy,
+  onUsername,
+  onPassword,
+  onSubmit,
+  onToggleMode,
+  onBack,
+}: {
+  mode: "signup" | "signin";
+  username: string;
+  password: string;
+  error: string;
+  busy: boolean;
+  onUsername: (value: string) => void;
+  onPassword: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onToggleMode: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <>
+      <div className="hd">
+        <button className="bkb" type="button" onClick={onBack} aria-label="Back">
+          <Icon name="back" />
+        </button>
+        <span className="tag">Demo account</span>
+      </div>
+      <h1>{mode === "signup" ? "Create your account" : "Welcome back"}</h1>
+      <p>Use a username and password to save your card. No email or verification code needed.</p>
+      <form className="auth-form" onSubmit={onSubmit}>
+        <label className="f">
+          <span>Username</span>
+          <input
+            value={username}
+            onChange={(event) => onUsername(event.target.value)}
+            autoComplete="username"
+            minLength={3}
+            maxLength={24}
+            required
+          />
+        </label>
+        <label className="f">
+          <span>Password</span>
+          <input
+            value={password}
+            onChange={(event) => onPassword(event.target.value)}
+            type="password"
+            autoComplete={mode === "signup" ? "new-password" : "current-password"}
+            minLength={8}
+            maxLength={256}
+            required
+          />
+        </label>
+        {error ? <p className="auth-error" role="alert">{error}</p> : null}
+        <div className="auth-actions">
+          <button className="btn pu" type="submit" disabled={busy}>
+            {busy ? "Please wait…" : mode === "signup" ? "Create account" : "Sign in"}
+          </button>
+        </div>
+      </form>
+      <p className="auth-switch">
+        {mode === "signup" ? "Already have an account?" : "New to Harmoni?"}{" "}
+        <button className="lk" type="button" onClick={onToggleMode}>
+          {mode === "signup" ? "Sign in" : "Create an account"}
+        </button>
+      </p>
+    </>
+  );
+}
+
 export function DetailsScreen({
   profile,
   xp,
+  saving,
   onChange,
   onBack,
   onContinue,
 }: {
   profile: Profile;
   xp: number;
+  saving: boolean;
   onChange: (field: TextField, value: string) => void;
   onBack: () => void;
   onContinue: () => void;
@@ -88,7 +164,11 @@ export function DetailsScreen({
           />
         </label>
       ))}
-      <ActionFooter><button className="btn" type="button" onClick={onContinue}>Looks good</button></ActionFooter>
+      <ActionFooter>
+        <button className="btn" type="button" onClick={onContinue} disabled={saving}>
+          {saving ? "Saving your card…" : "Save and continue"}
+        </button>
+      </ActionFooter>
     </>
   );
 }
@@ -267,17 +347,21 @@ export function CircleSetupScreen({
 
 export function DesignScreen({
   profile,
+  saving,
   onArt,
   onUpdate,
   onUpload,
   onBack,
+  onSave,
   onReset,
 }: {
   profile: Profile;
+  saving: boolean;
   onArt: (art: number) => void;
   onUpdate: (updates: Partial<Profile>) => void;
   onUpload: (file: File, kind: "photo" | "logo" | "cover") => void;
   onBack: () => void;
+  onSave: () => void;
   onReset: () => void;
 }) {
   const [needInput, setNeedInput] = useState("");
@@ -326,7 +410,7 @@ export function DesignScreen({
       <div className="hd">
         <button className="lk design-cancel" type="button" onClick={onBack}>Cancel</button>
         <b className="ed">Design your card</b>
-        <button className="lk design-save" type="button" onClick={onBack}>Save</button>
+        <button className="lk design-save" type="button" onClick={onSave} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
       </div>
       <h2>Card art</h2>
       <div className="ag">
@@ -343,7 +427,7 @@ export function DesignScreen({
         <label className="pill">＋ Cover photo<input hidden type="file" accept="image/*" onChange={(event) => event.target.files?.[0] && onUpload(event.target.files[0], "cover")} /></label>
         <label className="pill">＋ Logo<input hidden type="file" accept="image/*" onChange={(event) => event.target.files?.[0] && onUpload(event.target.files[0], "logo")} /></label>
         <button className="pill" type="button" onClick={() => onUpdate({ squarePhoto: !profile.squarePhoto })}>{profile.squarePhoto ? "Round photo" : "Square photo"}</button>
-        {profile.cover ? <button className="pill" type="button" onClick={() => onUpdate({ cover: "" })}>Remove cover</button> : null}
+        {profile.cover ? <button className="pill" type="button" onClick={() => onUpdate({ cover: "", coverStorageId: null })}>Remove cover</button> : null}
       </div>
       <h2>Personal details</h2>
       {([
@@ -419,7 +503,7 @@ export function DesignScreen({
       <button className="lk delete-card" type="button" onClick={() => confirmDelete ? onReset() : setConfirmDelete(true)}>
         {confirmDelete ? "Tap again to delete your card" : "Delete card"}
       </button>
-      <ActionFooter><button className="btn" type="button" onClick={onBack}>Preview card</button></ActionFooter>
+      <ActionFooter><button className="btn" type="button" onClick={onSave} disabled={saving}>{saving ? "Saving…" : "Preview card"}</button></ActionFooter>
     </>
   );
 }
@@ -583,8 +667,11 @@ export function ContactCardScreen({ contact, onBack }: { contact: Contact; onBac
       email: contact.email,
       phone: contact.phone,
       photo: contact.photo,
+      photoStorageId: null,
       cover: "",
+      coverStorageId: null,
       logo: "",
+      logoStorageId: null,
       squarePhoto: false,
       art: 5,
       circle: "",
@@ -627,6 +714,29 @@ export function ContactEntrySheet({
         <h1 className="entry-title">Add a <i>{isTag ? "tag" : "note"}</i></h1>
         <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={isTag ? "Investor, Friend, Follow up" : "What did you talk about?"} autoFocus />
         <button className="btn" type="button" onClick={onSave}>Save</button>
+      </div>
+    </div>
+  );
+}
+
+export function DeleteAccountSheet({
+  busy,
+  onConfirm,
+  onDismiss,
+}: {
+  busy: boolean;
+  onConfirm: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="sheet" onClick={(event) => event.target === event.currentTarget && !busy && onDismiss()}>
+      <div className="sp account-delete-sheet" role="alertdialog" aria-modal="true" aria-labelledby="delete-account-title">
+        <h2 id="delete-account-title">Delete your account?</h2>
+        <p>This permanently deletes your account, card, uploaded images, and saved contacts.</p>
+        <button className="btn g s" type="button" onClick={onDismiss} disabled={busy}>Keep my account</button>
+        <button className="btn g s delete-account-confirm" type="button" onClick={onConfirm} disabled={busy}>
+          {busy ? "Deleting account…" : "Delete account"}
+        </button>
       </div>
     </div>
   );
