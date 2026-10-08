@@ -20,7 +20,9 @@ export type IconName =
   | "pin"
   | "email"
   | "phone"
-  | "link";
+  | "link"
+  | "bell"
+  | "person";
 
 const ICONS: Record<IconName, ReactNode> = {
   back: <path d="m15 5-7 7 7 7" />,
@@ -42,6 +44,8 @@ const ICONS: Record<IconName, ReactNode> = {
   email: <><rect x="3" y="5" width="18" height="14" rx="2.5" /><path d="m4 7 8 6 8-6" /></>,
   phone: <path d="M6.5 3h3L11 7.5l-2 1.3a11 11 0 0 0 5.2 5.2l1.3-2 4.5 1.5v3a2.5 2.5 0 0 1-2.5 2.5A15 15 0 0 1 4 5.5 2.5 2.5 0 0 1 6.5 3z" />,
   link: <><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 14 18.7l1-1" /></>,
+  bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></>,
+  person: <><circle cx="12" cy="8" r="3.5" /><path d="M4.5 20a7.5 7.5 0 0 1 15 0" /></>,
 };
 
 export function Icon({

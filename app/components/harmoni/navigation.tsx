@@ -31,24 +31,26 @@ export function AppHeader({
 }
 
 const NAV_ITEMS: Array<{ id: Tab; title: string; icon: IconName }> = [
-  { id: "card", title: "My Card", icon: "card" },
-  { id: "contacts", title: "Contacts", icon: "contacts" },
+  { id: "circles", title: "Circles", icon: "circle" },
   { id: "scan", title: "Scan", icon: "scan" },
-  { id: "circle", title: "Circle", icon: "circle" },
+  { id: "matches", title: "Matches", icon: "sparkle" },
+  { id: "notifications", title: "Updates", icon: "bell" },
+  { id: "you", title: "You", icon: "person" },
 ];
 
 export function BottomNav({ active, onChange }: { active: Tab; onChange: (tab: Tab) => void }) {
+  const current = active === "contacts" ? "you" : active;
   return (
     <nav aria-label="Main navigation">
       {NAV_ITEMS.map((item) => (
         <button
-          className={`${item.id === "scan" ? "sc " : ""}${active === item.id ? "on" : ""}`}
+          className={`${item.id === "scan" ? "sc " : ""}${current === item.id ? "on" : ""}`}
           type="button"
           key={item.id}
           onClick={() => onChange(item.id)}
-          aria-current={active === item.id ? "page" : undefined}
+          aria-current={current === item.id ? "page" : undefined}
         >
-          {item.id === "scan" ? <><i><Icon name={item.icon} size={28} /></i><span>{item.title}</span></> : <><Icon name={item.icon} size={26} strokeWidth={1.8} />{item.title}</>}
+          {item.id === "scan" ? <><i><Icon name={item.icon} size={26} /></i><span>{item.title}</span></> : <><Icon name={item.icon} size={22} strokeWidth={1.8} /><span>{item.title}</span></>}
         </button>
       ))}
     </nav>

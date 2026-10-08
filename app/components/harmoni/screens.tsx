@@ -62,7 +62,7 @@ function ActionFooter({ children }: { children: ReactNode }) {
   return <div className="ft mt-10">{children}</div>;
 }
 
-export function WelcomeScreen({ onStart }: { onStart: () => void }) {
+export function WelcomeScreen({ onStart, onSignIn, onPreview }: { onStart: () => void; onSignIn: () => void; onPreview: () => void }) {
   return (
     <>
       <div className="top"><span className="wm">Harmoni</span></div>
@@ -71,10 +71,12 @@ export function WelcomeScreen({ onStart }: { onStart: () => void }) {
         <div className="fc c2" />
         <div className="fc c3" />
       </div>
-      <h1 className="hero">Your card.<br /><i>Your circle.</i></h1>
-      <p className="c">Meet someone, swap cards, and open doors through each other&apos;s networks.</p>
+      <h1 className="hero">Your story.<br /><i>Your people.</i></h1>
+      <p className="c">Start with what you&apos;re looking for. Shape a persona, then build your card and circle.</p>
       <ActionFooter>
-        <button className="btn pu" type="button" onClick={onStart}>Create my card</button>
+        <button className="btn pu" type="button" onClick={onStart}>Explore as a guest</button>
+        <button className="lk" type="button" onClick={onPreview}>Preview a circle invite</button>
+        <button className="lk" type="button" onClick={onSignIn}>I already have an account</button>
       </ActionFooter>
     </>
   );

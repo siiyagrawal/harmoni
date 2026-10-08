@@ -3,6 +3,11 @@ import type { Id } from "../../../convex/_generated/dataModel";
 export type View =
   | "welcome"
   | "auth"
+  | "guest-preview"
+  | "persona-select"
+  | "persona-permissions"
+  | "persona-onboarding"
+  | "persona-review"
   | "details"
   | "logo"
   | "photo"
@@ -12,7 +17,25 @@ export type View =
   | "access-log"
   | "home";
 
-export type Tab = "card" | "contacts" | "scan" | "circle";
+export type Tab = "circles" | "scan" | "matches" | "notifications" | "you" | "contacts";
+
+export type PersonaType = "business" | "personal" | "singles" | "family" | "custom";
+
+export type PersonaVisibility = "private" | "connections" | "circle" | "custom";
+
+export type PersonaDraft = {
+  type: PersonaType;
+  name: string;
+  needs: string;
+  offers: string;
+  interests: string;
+  visibility: PersonaVisibility;
+  publicFields: string[];
+};
+
+export type PersonaPreview = PersonaDraft & {
+  id: string;
+};
 
 export type Profile = {
   name: string;

@@ -31,7 +31,26 @@ import {
   ShareLinkSheet,
   WelcomeScreen,
 } from "./screens";
-import { INITIAL_PROFILE, type Contact, type Profile, type Tab, type View } from "./types";
+import {
+  GuestCirclePreviewScreen,
+  MatchesLandingScreen,
+  NotificationsLandingScreen,
+  PersonaHubScreen,
+  PersonaOnboardingScreen,
+  PersonaPermissionsScreen,
+  PersonaReviewScreen,
+  PersonaTypeScreen,
+} from "./phase-one-screens";
+import {
+  INITIAL_PROFILE,
+  type Contact,
+  type PersonaDraft,
+  type PersonaPreview,
+  type PersonaType,
+  type Profile,
+  type Tab,
+  type View,
+} from "./types";
 
 const SESSION_KEY = "harmoni_demo_session";
 
@@ -116,10 +135,24 @@ export default function HarmoniApp() {
 
 function HarmoniAppContent() {
   const router = useRouter();
-  const [screen, setScreen] = useState<View>("auth");
+  const [screen, setScreen] = useState<View>("welcome");
   const [returnTo, setReturnTo] = useState<View>("home");
   const [profile, setProfile] = useState<Profile>(INITIAL_PROFILE);
-  const [activeTab, setActiveTab] = useState<Tab>("card");
+  const [activeTab, setActiveTab] = useState<Tab>("you");
+  const [personaDraft, setPersonaDraft] = useState<PersonaDraft>({
+    type: "business",
+    name: "Work",
+    needs: "",
+    offers: "",
+    interests: "",
+    visibility: "private",
+    publicFields: ["name", "card"],
+  });
+  const [personaPreviews, setPersonaPreviews] = useState<PersonaPreview[]>([]);
+  const [activePersonaId, setActivePersonaId] = useState<string | null>(null);
+  const [editingPersonaId, setEditingPersonaId] = useState<string | null>(null);
+  const [personaGatePending, setPersonaGatePending] = useState(false);
+  const [adultConfirmed, setAdultConfirmed] = useState(false);
   const [circleName, setCircleName] = useState("");
   const [query, setQuery] = useState("");
   const [shared, setShared] = useState(false);
@@ -156,6 +189,8 @@ function HarmoniAppContent() {
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deletingCard, setDeletingCard] = useState(false);
   const restoredDemoUser = useRef<string | null>(null);
+  const personaIdCounter = useRef(1);
+  const tabScrollPositions = useRef(new Map<Tab, number>());
   const lastSavedProfile = useRef("");
   const signUpDemo = useAction(api.auth.signUp);
   const logInDemo = useAction(api.auth.logIn);
@@ -312,6 +347,10 @@ function HarmoniAppContent() {
       setDemoSession(null);
       setDemoUserId(null);
       setProfile(INITIAL_PROFILE);
+      setPersonaPreviews([]);
+      setActivePersonaId(null);
+      setEditingPersonaId(null);
+      setPersonaGatePending(false);
       setScreen("auth");
       setAuthError("Your session expired. Sign in again.");
       return;
@@ -412,7 +451,7 @@ function HarmoniAppContent() {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
-    if (screen !== "home" || activeTab !== "circle" || !demoSession) return;
+    if (screen !== "home" || activeTab !== "circles" || !demoSession) return;
     let active = true;
     void refreshMatches({ sessionToken: demoSession })
       .then((suggestions) => { if (active) setMatchingSuggestions(suggestions); })
@@ -463,22 +502,140 @@ function HarmoniAppContent() {
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
-  function navigate(next: View) {
+  function navigate(next: View, restoreTab: Tab = activeTab) {
+    if (screen === "home" && next !== "home" && typeof window !== "undefined") {
+      tabScrollPositions.current.set(activeTab, window.scrollY);
+    }
     setScreen(next);
     setSheet(null);
-    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        const top = next === "home" ? tabScrollPositions.current.get(restoreTab) ?? 0 : 0;
+        window.scrollTo({ top, behavior: "auto" });
+      });
+    }
   }
 
   function updateText(field: "name" | "title" | "company" | "headline" | "email" | "phone", value: string) {
     setProfile((current) => ({ ...current, [field]: value }));
   }
 
-  function startCard() {
-    setAuthMode("signup");
-    setAuthError("");
-    setAuthPassword("");
-    setAuthResetCode("");
-    navigate("auth");
+  function startPersonaFlow() {
+    setAdultConfirmed(false);
+    setPersonaDraft({
+      type: "business",
+      name: "Work",
+      needs: "",
+      offers: "",
+      interests: "",
+      visibility: "private",
+      publicFields: ["name", "card"],
+    });
+    setEditingPersonaId(null);
+    setPersonaGatePending(false);
+    navigate("persona-select");
+  }
+
+  function changePersonaType(type: PersonaType) {
+    const defaultNames: Record<PersonaType, string> = {
+      business: "Work",
+      personal: "Personal",
+      singles: "Dating",
+      family: "Family",
+      custom: "My persona",
+    };
+    setPersonaDraft((current) => ({ ...current, type, name: defaultNames[type] }));
+  }
+
+  function updatePersonaDraft(field: "needs" | "offers" | "interests", value: string) {
+    setPersonaDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function togglePersonaPublicField(field: string) {
+    setPersonaDraft((current) => ({
+      ...current,
+      publicFields: current.publicFields.includes(field)
+        ? current.publicFields.filter((item) => item !== field)
+        : [...current.publicFields, field],
+    }));
+  }
+
+  function editPersonaPreview(persona: PersonaPreview) {
+    setPersonaDraft({ ...persona, publicFields: [...persona.publicFields] });
+    setEditingPersonaId(persona.id);
+    navigate("persona-review");
+  }
+
+  function addMorePersonaContext(persona: PersonaPreview) {
+    setPersonaDraft({ ...persona, publicFields: [...persona.publicFields] });
+    setEditingPersonaId(persona.id);
+    navigate("persona-onboarding");
+  }
+
+  function discardPersonaDraft() {
+    if (personaGatePending && activePersonaId) removePersonaPreview(activePersonaId);
+    setEditingPersonaId(null);
+    setPersonaGatePending(false);
+    setPersonaDraft({
+      type: "business",
+      name: "Work",
+      needs: "",
+      offers: "",
+      interests: "",
+      visibility: "private",
+      publicFields: ["name", "card"],
+    });
+    if (demoSession) navigate(demoCard ? "home" : "details", "you");
+    else navigate("welcome");
+  }
+
+  function confirmPersonaPreview() {
+    const id = editingPersonaId ?? `persona-preview-${personaIdCounter.current++}`;
+    const preview: PersonaPreview = { ...personaDraft, id };
+    setPersonaPreviews((current) => current.some((persona) => persona.id === id)
+      ? current.map((persona) => persona.id === id ? preview : persona)
+      : [...current, preview]);
+    setActivePersonaId(id);
+
+    if (!demoSession) {
+      setPersonaGatePending(true);
+      setAuthMode("signup");
+      setAuthError("");
+      setAuthPassword("");
+      setAuthResetCode("");
+      navigate("auth");
+      return;
+    }
+
+    setPersonaGatePending(false);
+    if (demoCard) {
+      setActiveTab("you");
+      navigate("home", "you");
+      setToast("Persona preview added for this session.");
+    } else {
+      navigate("details");
+    }
+  }
+
+  function removePersonaPreview(id: string) {
+    setPersonaPreviews((current) => current.filter((persona) => persona.id !== id));
+    setActivePersonaId((current) => current === id ? null : current);
+    setEditingPersonaId((current) => current === id ? null : current);
+  }
+
+  function clearPersonaPreviews() {
+    setPersonaPreviews([]);
+    setActivePersonaId(null);
+    setEditingPersonaId(null);
+    setPersonaGatePending(false);
+  }
+
+  function openContacts() {
+    if (typeof window !== "undefined") tabScrollPositions.current.set(activeTab, window.scrollY);
+    setActiveTab("contacts");
+    setQuery("");
+    setContactView(null);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function submitDemoAuth(event: FormEvent<HTMLFormElement>) {
@@ -521,9 +678,10 @@ function HarmoniAppContent() {
         setToast("You’re signed in for this browser session.");
       }
       setAuthPassword("");
-      setActiveTab("card");
+      setActiveTab("you");
+      setPersonaGatePending(false);
       if (result.hasCard) {
-        navigate("home");
+        navigate("home", "you");
       } else {
         setProfile(INITIAL_PROFILE);
         navigate("details");
@@ -613,8 +771,8 @@ function HarmoniAppContent() {
       setSavingCard(false);
     }
     setCircleName(name);
-    setActiveTab("card");
-    navigate("home");
+    setActiveTab("you");
+    navigate("home", "you");
   }
 
   async function continueLogo() {
@@ -657,11 +815,12 @@ function HarmoniAppContent() {
       setAuthUsername("");
       setAuthPassword("");
       setProfile(INITIAL_PROFILE);
+      clearPersonaPreviews();
       setCircleName("");
       setShared(false);
       setContactView(null);
       setSelectedContactId(null);
-      setActiveTab("card");
+      setActiveTab("you");
       setQuery("");
       setSheet(null);
       navigate("auth");
@@ -707,11 +866,12 @@ function HarmoniAppContent() {
     setAuthPassword("");
     setAuthUsername("");
     setProfile(INITIAL_PROFILE);
+    clearPersonaPreviews();
     setCircleName("");
     setShared(false);
     setContactView(null);
     setSelectedContactId(null);
-    setActiveTab("card");
+    setActiveTab("you");
     setAuthMode("signin");
     navigate("auth");
   }
@@ -724,9 +884,10 @@ function HarmoniAppContent() {
       restoredDemoUser.current = null;
       setDemoSession(result.sessionToken);
       setProfile(INITIAL_PROFILE);
+      clearPersonaPreviews();
       setCircleName("");
       setShared(false);
-      setActiveTab("card");
+      setActiveTab("you");
       setAuthUsername("");
       setAuthPassword("");
       navigate("details");
@@ -777,7 +938,7 @@ function HarmoniAppContent() {
         break;
       case "qr":
         setSheet(null);
-        setActiveTab("card");
+        setActiveTab("you");
         setToast("Tap your card to reveal your QR");
         break;
       case "signature":
@@ -786,7 +947,7 @@ function HarmoniAppContent() {
         break;
       case "scan":
         setSheet(null);
-        setActiveTab("scan");
+        changeTab("scan");
         break;
       case "access-log":
         navigate("access-log");
@@ -821,10 +982,16 @@ function HarmoniAppContent() {
   }
 
   function changeTab(tab: Tab) {
+    if (typeof window !== "undefined") tabScrollPositions.current.set(activeTab, window.scrollY);
     setActiveTab(tab);
     setQuery("");
     setContactView(null);
-    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => window.scrollTo({
+        top: tabScrollPositions.current.get(tab) ?? 0,
+        behavior: "auto",
+      }));
+    }
   }
 
   async function saveContactEntry() {
@@ -863,33 +1030,86 @@ function HarmoniAppContent() {
   return (
     <>
       <main className={`app${screen === "welcome" ? " welcome in" : screen === "auth" ? " auth in" : " in"}`}>
-        {screen === "welcome" ? <WelcomeScreen onStart={startCard} /> : null}
+        {screen === "welcome" ? <WelcomeScreen
+          onStart={startPersonaFlow}
+          onPreview={() => navigate("guest-preview")}
+          onSignIn={() => {
+            setAuthMode("signin");
+            setAuthError("");
+            setAuthPassword("");
+            setPersonaGatePending(false);
+            navigate("auth");
+          }}
+        /> : null}
+        {screen === "guest-preview" ? <GuestCirclePreviewScreen onBack={() => navigate("welcome")} onContinue={startPersonaFlow} /> : null}
         {screen === "auth" ? (
-          <DemoAuthScreen
-            mode={authMode}
-            username={authUsername}
-            password={authPassword}
-            error={authError}
-            busy={authBusy}
-            resetCode={authResetCode}
-            resetCodeValue={authResetCodeValue}
-            onUsername={setAuthUsername}
-            onPassword={setAuthPassword}
-            onResetCode={setAuthResetCodeValue}
-            onSubmit={(event) => void submitDemoAuth(event)}
-            onToggleMode={() => {
-              setAuthMode((mode) => mode === "signup" || mode === "reset" ? "signin" : "signup");
-              setAuthError("");
-              setAuthPassword("");
-              setAuthResetCode("");
-            }}
-            onForgotPassword={() => {
-              setAuthMode("forgot");
-              setAuthError("");
-              setAuthPassword("");
-              setAuthResetCode("");
-            }}
+          <>
+            {personaGatePending ? <div className="card p1-static-notice p1-auth-context-note"><b>Your persona draft is ready</b><p>Finish creating your demo account to continue. Persona details are a session-only preview in this phase; your existing card flow keeps its current save behavior.</p></div> : null}
+            <DemoAuthScreen
+              mode={authMode}
+              username={authUsername}
+              password={authPassword}
+              error={authError}
+              busy={authBusy}
+              resetCode={authResetCode}
+              resetCodeValue={authResetCodeValue}
+              onUsername={setAuthUsername}
+              onPassword={setAuthPassword}
+              onResetCode={setAuthResetCodeValue}
+              onSubmit={(event) => void submitDemoAuth(event)}
+              onToggleMode={() => {
+                setAuthMode((mode) => mode === "signup" || mode === "reset" ? "signin" : "signup");
+                setAuthError("");
+                setAuthPassword("");
+                setAuthResetCode("");
+              }}
+              onForgotPassword={() => {
+                setAuthMode("forgot");
+                setAuthError("");
+                setAuthPassword("");
+                setAuthResetCode("");
+              }}
+              onBack={() => navigate(personaGatePending ? "persona-review" : "welcome")}
+            />
+          </>
+        ) : null}
+        {screen === "persona-select" ? (
+          <PersonaTypeScreen
+            selected={personaDraft.type}
+            name={personaDraft.name}
+            onSelect={changePersonaType}
+            onName={(name) => setPersonaDraft((current) => ({ ...current, name }))}
             onBack={() => navigate("welcome")}
+            onContinue={() => navigate("persona-permissions")}
+          />
+        ) : null}
+        {screen === "persona-permissions" ? (
+          <PersonaPermissionsScreen
+            visibility={personaDraft.visibility}
+            adultConfirmed={adultConfirmed}
+            onVisibility={(visibility) => setPersonaDraft((current) => ({ ...current, visibility }))}
+            onAdultConfirmed={setAdultConfirmed}
+            onBack={() => navigate("persona-select")}
+            onContinue={() => navigate("persona-onboarding")}
+          />
+        ) : null}
+        {screen === "persona-onboarding" ? (
+          <PersonaOnboardingScreen
+            draft={personaDraft}
+            onChange={updatePersonaDraft}
+            onBack={() => navigate("persona-permissions")}
+            onReview={() => navigate("persona-review")}
+          />
+        ) : null}
+        {screen === "persona-review" ? (
+          <PersonaReviewScreen
+            draft={personaDraft}
+            onChange={updatePersonaDraft}
+            onVisibility={(visibility) => setPersonaDraft((current) => ({ ...current, visibility }))}
+            onTogglePublicField={togglePersonaPublicField}
+            onBack={() => navigate("persona-onboarding")}
+            onDiscard={discardPersonaDraft}
+            onConfirm={confirmPersonaPreview}
           />
         ) : null}
         {screen === "details" ? (
@@ -1008,8 +1228,20 @@ function HarmoniAppContent() {
                 onScan={() => changeTab("scan")}
               />
             ) : null}
-            {activeTab === "card" ? (
-              <MyCardScreen profile={profile} xp={xp} awardedBadges={awardedBadges} onShare={() => void shareCard()} />
+            {activeTab === "you" ? (
+              <>
+                <MyCardScreen profile={profile} xp={xp} awardedBadges={awardedBadges} onShare={() => void shareCard()} />
+                <PersonaHubScreen
+                  personas={personaPreviews}
+                  selectedId={activePersonaId}
+                  onSelect={setActivePersonaId}
+                  onCreate={startPersonaFlow}
+                  onEdit={editPersonaPreview}
+                  onAddMore={addMorePersonaContext}
+                  onDelete={removePersonaPreview}
+                  onOpenContacts={openContacts}
+                />
+              </>
             ) : null}
             {activeTab === "contacts" && !contactView ? (
               <ContactsScreen
@@ -1048,7 +1280,9 @@ function HarmoniAppContent() {
               </ScreenErrorBoundary>
             ) : null}
             {activeTab === "scan" ? <ScanScreen onScan={handleScannedLink} /> : null}
-            {activeTab === "circle" ? (
+            {activeTab === "matches" ? <MatchesLandingScreen onCreateContext={startPersonaFlow} /> : null}
+            {activeTab === "notifications" ? <NotificationsLandingScreen /> : null}
+            {activeTab === "circles" ? (
               <ScreenErrorBoundary section="your circle">
                 <CircleScreen
                   profile={profile}
