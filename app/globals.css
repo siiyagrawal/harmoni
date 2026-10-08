@@ -355,4 +355,9 @@ table.card.p5-table{display:table;padding:0 14px}
 .p5-categories span{display:inline-flex;align-items:center;gap:6px}.p5-categories button{border:0;background:none;color:var(--mu);font-size:14px;cursor:pointer;padding:0 2px}
 .p5-add-category{margin-top:12px;gap:8px}.p5-add-category input{padding:10px 12px;font-size:14px}
 .p5-send-notice{margin-top:10px}.p5-admin-card .p2-select-row{background:rgba(255,253,248,.7);margin:8px 0}
+/* Phase 6: cross-flow states, data and privacy, operations */
+.p6-offline{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);width:min(404px,calc(100% - 28px));z-index:25;padding:11px 16px;border-radius:18px;background:rgba(246,201,181,.95);color:#6b3a2a;font-size:13px;font-weight:600;text-align:center;box-shadow:0 16px 30px -18px rgba(120,60,40,.7)}
+.p6-delete{margin-top:24px}.p6-delete .btn{margin-top:12px}
+.p6-inline-pill{margin:10px 0 0}
+.p2-check-list div>span[aria-hidden]{color:var(--ok);font-weight:700;flex:none}
 .p3-suggestion{padding:14px 16px;border-style:dashed;border-color:rgba(201,162,76,.6)}.p3-suggestion p{margin:6px 0 10px;font-size:14px;color:var(--ink)}.p3-suggestion .pill{font-size:12px}

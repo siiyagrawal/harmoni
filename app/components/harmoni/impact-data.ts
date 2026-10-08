@@ -112,7 +112,7 @@ export function useAdminDemo() {
   const [categories, setCategories] = useState(["Startups", "Agriculture", "Legal", "Health", "Makers", "Family", "Finance", "Community"]);
   const [audit, setAudit] = useState<AuditEntry[]>(SAMPLE_AUDIT);
   const [notices, setNotices] = useState<SentNotice[]>([]);
-  const [tab, setTab] = useState<"overview" | "hubs" | "reports" | "users" | "circles" | "notices" | "audit">("overview");
+  const [tab, setTab] = useState<"overview" | "hubs" | "reports" | "users" | "circles" | "notices" | "operations" | "audit">("overview");
   const counter = useRef(1);
 
   function log(action: string, target: string, reason: string) {

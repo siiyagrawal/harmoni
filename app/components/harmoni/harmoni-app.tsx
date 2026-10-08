@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useRouter } from "next/navigation";
@@ -69,6 +69,8 @@ import { MessagesInboxScreen, ThreadScreen, type ThreadAccess } from "./message-
 import { useAdminDemo, useImpactDemo } from "./impact-data";
 import { CircleInsights, FeedbackScreen, ImpactEntryCard, ImpactScreen, TopContributorsCard } from "./impact-screens";
 import { AdminScreen } from "./admin-screens";
+import { OfflineBanner, RestoringState } from "./app-states";
+import { PrivacyScreen } from "./privacy-screens";
 import {
   ExpressInterestScreen,
   HelpOfferScreen,
@@ -171,17 +173,39 @@ function optimizeImage(file: File, maxDimension: number, format: "image/jpeg" | 
   });
 }
 
+type SessionEnd = { screen: View; toast?: string; authError?: string };
+
 export default function HarmoniApp() {
+  // Ending a session remounts the app so no sample or in-memory state carries over to the next person.
+  const [epoch, setEpoch] = useState(0);
+  const [sessionEnd, setSessionEnd] = useState<SessionEnd | null>(null);
+  const endSession = useCallback((next: SessionEnd) => {
+    setSessionEnd(next);
+    setEpoch((current) => current + 1);
+  }, []);
   return (
-    <ScreenErrorBoundary section="Harmoni">
-      <HarmoniAppContent />
+    <ScreenErrorBoundary
+      section="Harmoni"
+      recoverLabel="Sign in again"
+      onRecover={() => {
+        try {
+          localStorage.removeItem(SESSION_KEY);
+        } catch {}
+        endSession({ screen: "auth", authError: "Your session ended. Sign in again." });
+      }}
+    >
+      <HarmoniAppContent
+        key={epoch}
+        initial={sessionEnd}
+        onSessionEnded={endSession}
+      />
     </ScreenErrorBoundary>
   );
 }
 
-function HarmoniAppContent() {
+function HarmoniAppContent({ initial, onSessionEnded }: { initial: SessionEnd | null; onSessionEnded: (next: SessionEnd) => void }) {
   const router = useRouter();
-  const [screen, setScreen] = useState<View>("welcome");
+  const [screen, setScreen] = useState<View>(initial?.screen ?? "welcome");
   const [returnTo, setReturnTo] = useState<View>("home");
   const [profile, setProfile] = useState<Profile>(INITIAL_PROFILE);
   const [activeTab, setActiveTab] = useState<Tab>("you");
@@ -227,11 +251,11 @@ function HarmoniAppContent() {
   const [authPassword, setAuthPassword] = useState("");
   const [authResetCode, setAuthResetCode] = useState("");
   const [authResetCodeValue, setAuthResetCodeValue] = useState("");
-  const [authError, setAuthError] = useState("");
+  const [authError, setAuthError] = useState(initial?.authError ?? "");
   const [authBusy, setAuthBusy] = useState(false);
   const [savingCard, setSavingCard] = useState(false);
   const [sheet, setSheet] = useState<"menu" | "setup" | "tag" | "note" | "met" | "circle-name" | "delete-account" | "delete-card" | "share-link" | null>(null);
-  const [toast, setToast] = useState("");
+  const [toast, setToast] = useState(initial?.toast ?? "");
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deletingCard, setDeletingCard] = useState(false);
   const circleDemo = useCircleDemo();
@@ -296,23 +320,25 @@ function HarmoniAppContent() {
   const refreshMatches = useMutation(api.matching.refresh);
   const dismissMatch = useMutation(api.matching.dismiss);
   const seedDemoData = useMutation(api.seeds.seedDemoData);
+  // Session-scoped queries wait until the stored token is confirmed, so a stale token can't crash the app.
+  const sessionConfirmed = hydrated && Boolean(demoMe);
   const demoCard = useQuery(
     api.cards.getPrimaryDemo,
-    hydrated && demoSession ? { sessionToken: demoSession } : "skip",
+    sessionConfirmed && demoSession ? { sessionToken: demoSession } : "skip",
   );
   const contactPage = useQuery(
     api.contacts.listMine,
-    hydrated && demoSession ? { sessionToken: demoSession, paginationOpts: { numItems: 100, cursor: null } } : "skip",
+    sessionConfirmed && demoSession ? { sessionToken: demoSession, paginationOpts: { numItems: 100, cursor: null } } : "skip",
   );
-  const progress = useQuery(api.progress.mine, hydrated && demoSession ? { sessionToken: demoSession } : "skip");
-  const myCircle = useQuery(api.circles.mine, hydrated && demoSession ? { sessionToken: demoSession } : "skip");
-  const exchangeInbox = useQuery(api.exchanges.inbox, hydrated && demoSession ? { sessionToken: demoSession } : "skip");
-  const introInbox = useQuery(api.intros.inbox, hydrated && demoSession ? { sessionToken: demoSession } : "skip");
-  const sentIntroRequests = useQuery(api.intros.sentMine, hydrated && demoSession ? { sessionToken: demoSession } : "skip");
-  const personaItems = useQuery(api.persona.mine, hydrated && demoSession ? { sessionToken: demoSession } : "skip");
+  const progress = useQuery(api.progress.mine, sessionConfirmed && demoSession ? { sessionToken: demoSession } : "skip");
+  const myCircle = useQuery(api.circles.mine, sessionConfirmed && demoSession ? { sessionToken: demoSession } : "skip");
+  const exchangeInbox = useQuery(api.exchanges.inbox, sessionConfirmed && demoSession ? { sessionToken: demoSession } : "skip");
+  const introInbox = useQuery(api.intros.inbox, sessionConfirmed && demoSession ? { sessionToken: demoSession } : "skip");
+  const sentIntroRequests = useQuery(api.intros.sentMine, sessionConfirmed && demoSession ? { sessionToken: demoSession } : "skip");
+  const personaItems = useQuery(api.persona.mine, sessionConfirmed && demoSession ? { sessionToken: demoSession } : "skip");
   const accessLog = useQuery(
     api.persona.accessLogMine,
-    hydrated && demoSession && screen === "access-log" ? { sessionToken: demoSession } : "skip",
+    sessionConfirmed && demoSession && screen === "access-log" ? { sessionToken: demoSession } : "skip",
   );
   const xp = progress?.xp ?? 0;
   const awardedBadges = progress?.awardedBadges ?? [];
@@ -346,7 +372,7 @@ function HarmoniAppContent() {
   const selectedContact = contacts.find((contact) => contact.id === selectedContactId);
   const introNetwork = useQuery(
     api.circles.network,
-    hydrated && demoSession && selectedContact?.canRequestIntros && selectedContact.linkedUserId
+    sessionConfirmed && demoSession && selectedContact?.canRequestIntros && selectedContact.linkedUserId
       ? { sessionToken: demoSession, introducerId: selectedContact.linkedUserId }
       : "skip",
   );
@@ -455,12 +481,11 @@ function HarmoniAppContent() {
       setActivePersonaId(null);
       setEditingPersonaId(null);
       setPersonaGatePending(false);
-      setScreen("auth");
-      setAuthError("Your session expired. Sign in again.");
+      onSessionEnded({ screen: "auth", authError: "Your session expired. Sign in again." });
       return;
     }
     setDemoUserId(demoMe.userId);
-  }, [demoMe, demoSession]);
+  }, [demoMe, demoSession, onSessionEnded]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -759,6 +784,14 @@ function HarmoniAppContent() {
   }
 
   function removePersonaPreview(id: string) {
+    // Deleting a persona closes what was done as it; other personas are untouched.
+    const removed = personaPreviews.find((persona) => persona.id === id);
+    if (removed) {
+      connectDemo.requests
+        .filter((request) => request.direction === "sent" && request.persona === removed.name && ["pending", "host-review", "approved"].includes(request.status))
+        .forEach((request) => connectDemo.withdraw(request.id));
+      if (connectDemo.matchScope.persona === removed.name) connectDemo.setMatchScope((current) => ({ ...current, persona: "Main card" }));
+    }
     setPersonaPreviews((current) => current.filter((persona) => persona.id !== id));
     setActivePersonaId((current) => current === id ? null : current);
     setEditingPersonaId((current) => current === id ? null : current);
@@ -968,8 +1001,7 @@ function HarmoniAppContent() {
       setActiveTab("you");
       setQuery("");
       setSheet(null);
-      navigate("auth");
-      setToast("Your account was deleted.");
+      onSessionEnded({ screen: "auth", toast: "Your account was deleted." });
     } catch (error) {
       setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Your account couldn’t be deleted. Try again.");
     } finally {
@@ -1018,7 +1050,7 @@ function HarmoniAppContent() {
     setSelectedContactId(null);
     setActiveTab("you");
     setAuthMode("signin");
-    navigate("auth");
+    onSessionEnded({ screen: "auth", toast: "You’re signed out." });
   }
 
   async function resetDemo() {
@@ -1035,8 +1067,7 @@ function HarmoniAppContent() {
       setActiveTab("you");
       setAuthUsername("");
       setAuthPassword("");
-      navigate("details");
-      setToast("Your demo is ready to start over.");
+      onSessionEnded({ screen: "welcome", toast: "Your demo is ready to start over." });
     } catch (error) {
       setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "The demo could not be reset.");
     }
@@ -1113,6 +1144,10 @@ function HarmoniAppContent() {
         setSheet(null);
         navigate("admin");
         break;
+      case "privacy":
+        setSheet(null);
+        navigate("privacy");
+        break;
       case "reset":
         setSheet(null);
         void resetDemo();
@@ -1139,6 +1174,9 @@ function HarmoniAppContent() {
       .map((circle) => ({ id: circle.id, name: circle.name, code: circle.joinCode, url: null })),
   ];
 
+  // A stored session is still being checked; show that instead of flashing the welcome or sign-in screen.
+  const restoring = !hydrated || (Boolean(demoSession) && (screen === "welcome" || screen === "auth")
+    && (demoMe === undefined || (demoMe !== null && demoCard === undefined)));
   const findCircle = (id: string | null) => circleDemo.circles.find((circle) => circle.id === id) ?? null;
   const entryCircle = findCircle(entryCircleId);
   const joinIntent = findCircle(joinIntentId);
@@ -1166,7 +1204,7 @@ function HarmoniAppContent() {
     if (thread.blocked) return { allowed: false, reason: "blocked" };
     const circle = findCircle(thread.circleId);
     const member = Boolean(circle && (circle.status === "active" || circle.role === "host"));
-    if (thread.kind === "hub") return member ? { allowed: true, reason: "ok" } : { allowed: false, reason: "left" };
+    if (thread.kind === "hub") return member && circle?.hubStatus === "active" ? { allowed: true, reason: "ok" } : { allowed: false, reason: "left" };
     const request = connectDemo.requests.find((item) => item.id === thread.requestId) ?? connectDemo.connectionWith(thread.personId);
     if (!request || request.status === "withdrawn") return { allowed: false, reason: "withdrawn" };
     if (request.status !== "approved") return { allowed: false, reason: "left" };
@@ -1234,6 +1272,7 @@ function HarmoniAppContent() {
     if (destination.type === "circle" || destination.type === "hub" || destination.type === "spotlight-ask") {
       const circle = findCircle(destination.type === "circle" ? destination.id : destination.circleId);
       if (!circle || !circle.published) return "This circle is no longer available.";
+      if (circle.kind === "hub" && circle.hubStatus !== "active") return "This Hub isn’t active right now.";
       if (item.category === "invite" && circle.status !== "invited") return "You’ve already answered this invitation.";
       if (item.category === "admission" && circle.status !== "payment") return "Your membership status has changed since this update.";
       if (destination.type !== "circle" && circle.status !== "active") return "You’re no longer an active member of this circle.";
@@ -1393,7 +1432,8 @@ function HarmoniAppContent() {
   return (
     <>
       <main className={`app${screen === "welcome" ? " welcome in" : screen === "auth" ? " auth in" : " in"}`}>
-        {screen === "welcome" ? <WelcomeScreen
+        {restoring ? <RestoringState /> : null}
+        {screen === "welcome" && !restoring ? <WelcomeScreen
           onStart={() => startPersonaFlow("welcome")}
           onPreview={() => { setEntryCircleId("creative-founders"); navigate("guest-preview"); }}
           onJoinCode={() => navigate("join-code")}
@@ -1429,7 +1469,7 @@ function HarmoniAppContent() {
             }}
           />
         ) : null}
-        {screen === "auth" ? (
+        {screen === "auth" && !restoring ? (
           <>
             {pendingAlertId && !personaGatePending ? <div className="card p1-static-notice p1-auth-context-note"><b>Sign in to open your update</b><p>We’ll take you straight to it after you sign in.</p></div> : null}
             {personaGatePending ? <div className="card p1-static-notice p1-auth-context-note"><b>Verify to save your persona</b><p>Create your demo account to keep your persona draft.{joinIntent ? ` Saving doesn’t join ${joinIntent.name}; you’ll confirm joining next.` : ""} Persona details are a session-only preview in this phase; your existing card flow keeps its current save behavior.</p></div> : null}
@@ -1729,6 +1769,16 @@ function HarmoniAppContent() {
             circleName={findCircle(feedbackRequest.circleId)?.name ?? "your circle"}
             onBack={() => feedbackReturn === "impact" ? navigate("impact") : (setActiveTab("notifications"), navigate("home", "notifications"))}
             onAnswer={(outcome, publicThanks, note) => impactDemo.answer(feedbackRequest.id, outcome, publicThanks, note)}
+          />
+        ) : null}
+        {screen === "privacy" ? (
+          <PrivacyScreen
+            personas={personaPreviews}
+            onBack={() => navigate("home")}
+            onEditPersona={editPersonaPreview}
+            onDeletePersona={(id) => { removePersonaPreview(id); setToast("Persona deleted. Matches will rebuild without it."); }}
+            onAccessLog={() => navigate("access-log")}
+            onDeleteAccount={() => setSheet("delete-account")}
           />
         ) : null}
         {screen === "admin" ? (
@@ -2130,6 +2180,7 @@ function HarmoniAppContent() {
         <CircleNameSheet value={circleName} onChange={setCircleName} onSave={() => void saveCircleName()} onDismiss={() => setSheet(null)} />
       ) : null}
       {toast ? <div className="toast" role="status">{toast}</div> : null}
+      <OfflineBanner />
     </>
   );
 }

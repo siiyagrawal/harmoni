@@ -388,7 +388,7 @@ export function CircleDetailScreen({
       </div>
       {circle.fee.mode === "paid" ? <p className="p2-fine">{circle.fee.terms} A circle fee is separate from Harmoni Premium.</p> : null}
       {canInvite && circle.published && !hubInactive ? <button className="btn g s" type="button" onClick={onShare}>Invite people · QR, link or code</button> : null}
-      {circle.kind === "hub" && circle.hub && (circle.status === "active" || isHost) ? <button className="btn g s" type="button" onClick={onHub}>Hub structure and notices</button> : null}
+      {circle.kind === "hub" && circle.hub && circle.hubStatus === "active" && (circle.status === "active" || isHost) ? <button className="btn g s" type="button" onClick={onHub}>Hub structure and notices</button> : null}
       {circle.status === "active" && !isHost && activeLinks.length ? (
         <>
           <h2 className="p1-section-title">Connected circles</h2>

@@ -3,6 +3,7 @@ import type { CircleDemo } from "./circle-data";
 import type { AdminDemo, AdminUser } from "./impact-data";
 import { FunnelChart, StatTiles, Suggestions } from "./analytics-ui";
 import { Avatar, Icon } from "./ui";
+import { OperationsPanel } from "./operations-panel";
 
 // Reason-gated action: every admin decision records why, and lands in the audit log.
 function ReasonAction({ label, confirm, danger, onConfirm }: { label: string; confirm: string; danger?: boolean; onConfirm: (reason: string) => void }) {
@@ -40,6 +41,7 @@ export function AdminScreen({ admin, circleDemo, onBack, onToast }: { admin: Adm
     ["users", "Users"],
     ["circles", "Circles"],
     ["notices", "Notices"],
+    ["operations", "Operations"],
     ["audit", "Audit"],
   ];
 
@@ -247,6 +249,8 @@ export function AdminScreen({ admin, circleDemo, onBack, onToast }: { admin: Adm
           {admin.notices.length ? <div className="lst p4-list">{admin.notices.map((item) => <div className="ct p4-delivery" key={item.id}><div className="m"><b>{item.text}</b><div className="tag">{item.audience} · {item.channel} · {item.at}</div></div></div>)}</div> : null}
         </>
       ) : null}
+
+      {tab === "operations" ? <OperationsPanel admin={admin} onToast={onToast} /> : null}
 
       {tab === "audit" ? (
         <div className="lst p4-list">

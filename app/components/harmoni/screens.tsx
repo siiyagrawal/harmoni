@@ -10,7 +10,7 @@ import { Avatar, CardArtwork, Icon, ProgressRing } from "./ui";
 
 type TextField = "name" | "title" | "company" | "headline" | "email" | "phone";
 
-type ScreenErrorBoundaryProps = { children: ReactNode; section: string };
+type ScreenErrorBoundaryProps = { children: ReactNode; section: string; recoverLabel?: string; onRecover?: () => void };
 type ScreenErrorBoundaryState = { hasError: boolean; retryKey: number };
 
 export class ScreenErrorBoundary extends Component<ScreenErrorBoundaryProps, ScreenErrorBoundaryState> {
@@ -24,6 +24,11 @@ export class ScreenErrorBoundary extends Component<ScreenErrorBoundaryProps, Scr
     this.setState((current) => ({ hasError: false, retryKey: current.retryKey + 1 }));
   };
 
+  private recover = () => {
+    this.props.onRecover?.();
+    this.retry();
+  };
+
   render() {
     if (this.state.hasError) {
       return (
@@ -31,6 +36,7 @@ export class ScreenErrorBoundary extends Component<ScreenErrorBoundaryProps, Scr
           <b>We couldn&apos;t load {this.props.section}.</b>
           <p>Your saved information is safe. Try loading this section again.</p>
           <button className="btn g s" type="button" onClick={this.retry}>Try again</button>
+          {this.props.onRecover ? <button className="lk" type="button" onClick={this.recover}>{this.props.recoverLabel ?? "Start over"}</button> : null}
         </div>
       );
     }

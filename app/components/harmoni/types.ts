@@ -28,6 +28,7 @@ export type View =
   | "impact"
   | "feedback"
   | "admin"
+  | "privacy"
   | "details"
   | "logo"
   | "photo"
