@@ -21,7 +21,7 @@ import {
 } from "./circle-data";
 import { Avatar, Icon } from "./ui";
 
-export type ManageSection = "requests" | "members" | "invites" | "settings" | "connections";
+export type ManageSection = "requests" | "members" | "invites" | "settings" | "connections" | "insights";
 
 const GUEST_FIELD_LABELS: Record<GuestField, string> = {
   purpose: "Purpose and rules",
@@ -41,6 +41,7 @@ const HUB_ROLE_LABELS: Record<HubRole, string> = {
 function statusLabel(circle: DemoCircle) {
   if (circle.role === "host") {
     if (circle.kind === "hub" && circle.hubStatus === "requested") return { label: "Hub requested", tone: "wait" };
+    if (circle.kind === "hub" && circle.hubStatus === "revoked") return { label: "Hub revoked", tone: "muted" };
     return circle.published ? { label: "Hosting", tone: "ok" } : { label: "Draft", tone: "wait" };
   }
   switch (circle.status) {
@@ -275,9 +276,11 @@ export function CircleDetailScreen({
   onHub,
   onLinkConsent,
   spotlight,
+  contributors,
 }: {
   circle: DemoCircle;
   spotlight?: ReactNode;
+  contributors?: ReactNode;
   onBack: () => void;
   onJoin: () => void;
   onWithdraw: () => void;
@@ -293,13 +296,13 @@ export function CircleDetailScreen({
   const isHost = circle.role === "host";
   const canInvite = isHost || (circle.status === "active" && circle.settings.whoCanInvite === "members");
   const activeLinks = circle.links.filter((link) => link.status === "active");
-  const hubInactive = circle.kind === "hub" && circle.hubStatus === "requested";
+  const hubInactive = circle.kind === "hub" && circle.hubStatus !== "active";
 
   function statusCard() {
     if (isHost) {
       return (
         <div className="card p2-status-card">
-          <b>{hubInactive ? "Hub requested — not active yet" : circle.published ? "You host this circle" : "Draft — not published"}</b>
+          <b>{hubInactive ? (circle.hubStatus === "revoked" ? "Hub revoked by Harmoni" : "Hub requested — not active yet") : circle.published ? "You host this circle" : "Draft — not published"}</b>
           <p>{hubInactive ? "Harmoni reviews Hub applications by email. This Hub stays inactive until Harmoni’s platform Super Admin enables it." : circle.published ? "Manage requests, members, invitations, connections and settings." : "Paid circles can’t publish until payment collection, payouts and refunds are approved."}</p>
           <button className="btn s" type="button" onClick={onManage}>Manage circle</button>
         </div>
@@ -402,6 +405,7 @@ export function CircleDetailScreen({
           })}
         </>
       ) : null}
+      {contributors}
       {circle.status !== "active" && !isHost ? <p className="p2-fine">Member names and details are visible only to active members, and only as each member allows.</p> : null}
     </>
   );
@@ -641,7 +645,9 @@ export function ManageCircleScreen({
   onHub,
   onSpotlights,
   onToast,
+  insights,
 }: {
+  insights: ReactNode;
   circle: DemoCircle;
   demo: CircleDemo;
   onSpotlights: () => void;
@@ -669,7 +675,7 @@ export function ManageCircleScreen({
   const broadening = (circle.visibility === "private" && settings.visibility === "public")
     || (!circle.guestFields.includes("memberNames") && settings.guestFields.includes("memberNames"))
     || (circle.admission !== "open" && settings.admission === "open");
-  const hubInactive = circle.kind === "hub" && circle.hubStatus === "requested";
+  const hubInactive = circle.kind === "hub" && circle.hubStatus !== "active";
 
   function saveSettings() {
     const { visibility, admission, capacityOn, capacity, guestFields, ...hostSettings } = settings;
@@ -683,6 +689,7 @@ export function ManageCircleScreen({
     ["members", "Members"],
     ["invites", "Invites"],
     ["connections", "Connections"],
+    ["insights", "Insights"],
     ["settings", "Settings"],
   ];
 
@@ -788,6 +795,8 @@ export function ManageCircleScreen({
           {!circle.settings.allowLinking ? <p className="p2-fine">Circle connections are turned off in Settings.</p> : null}
         </>
       ) : null}
+
+      {section === "insights" ? insights : null}
 
       {section === "settings" ? (
         <>

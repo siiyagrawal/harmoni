@@ -66,6 +66,9 @@ import { useConnectDemo, type ConnRequest, type DemoMatch } from "./connect-data
 import { useMessagingDemo, useNotificationsDemo, type DemoNotification, type DemoThread } from "./notify-data";
 import { NotificationSettingsScreen, NotificationsScreen } from "./notify-screens";
 import { MessagesInboxScreen, ThreadScreen, type ThreadAccess } from "./message-screens";
+import { useAdminDemo, useImpactDemo } from "./impact-data";
+import { CircleInsights, FeedbackScreen, ImpactEntryCard, ImpactScreen, TopContributorsCard } from "./impact-screens";
+import { AdminScreen } from "./admin-screens";
 import {
   ExpressInterestScreen,
   HelpOfferScreen,
@@ -254,6 +257,10 @@ function HarmoniAppContent() {
   const [messagesReturn, setMessagesReturn] = useState<View>("home");
   const [messagesReturnTab, setMessagesReturnTab] = useState<Tab>("notifications");
   const [pendingAlertId, setPendingAlertId] = useState<string | null>(null);
+  const impactDemo = useImpactDemo();
+  const adminDemo = useAdminDemo();
+  const [feedbackId, setFeedbackId] = useState<string | null>(null);
+  const [feedbackReturn, setFeedbackReturn] = useState<"impact" | "notifications">("notifications");
   const restoredDemoUser = useRef<string | null>(null);
   const personaIdCounter = useRef(1);
   const tabScrollPositions = useRef(new Map<Tab, number>());
@@ -1102,6 +1109,10 @@ function HarmoniAppContent() {
             .catch((error: unknown) => setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Demo data could not be loaded."));
         }
         break;
+      case "admin":
+        setSheet(null);
+        navigate("admin");
+        break;
       case "reset":
         setSheet(null);
         void resetDemo();
@@ -1145,6 +1156,7 @@ function HarmoniAppContent() {
     navigate(next);
   }
 
+  const feedbackRequest = impactDemo.feedback.find((item) => item.id === feedbackId) ?? null;
   const activeThread = messagingDemo.threads.find((thread) => thread.id === threadId) ?? null;
   const unreadMessages = messagingDemo.threads.filter((thread) => !thread.hidden).reduce((sum, thread) => sum + thread.unread, 0);
   const unreadNotifications = notificationsDemo.items.filter((item) => !item.read).length;
@@ -1217,6 +1229,7 @@ function HarmoniAppContent() {
       if (request.status === "expired") return "This request expired.";
       return "This request is no longer available.";
     }
+    if (destination.type === "feedback") return impactDemo.feedback.find((entry) => entry.id === destination.id)?.status === "awaiting" ? null : "You already answered this follow-up.";
     if (destination.type === "thread") return messagingDemo.threads.some((thread) => thread.id === destination.id) ? null : "This conversation is no longer available.";
     if (destination.type === "circle" || destination.type === "hub" || destination.type === "spotlight-ask") {
       const circle = findCircle(destination.type === "circle" ? destination.id : destination.circleId);
@@ -1273,6 +1286,11 @@ function HarmoniAppContent() {
       case "spotlight-ask":
         setSpotlightAskCircleId(destination.circleId);
         navigate("spotlight-ask");
+        break;
+      case "feedback":
+        setFeedbackId(destination.id);
+        setFeedbackReturn("notifications");
+        navigate("feedback");
         break;
     }
   }
@@ -1673,7 +1691,11 @@ function HarmoniAppContent() {
             }}
             onMute={(muted) => { messagingDemo.setMuted(activeThread.id, muted); setToast(muted ? "Alerts muted for this conversation." : "Alerts back on."); }}
             onHide={() => { messagingDemo.setHidden(activeThread.id, true); navigate("messages"); setToast("Conversation hidden."); }}
-            onReport={() => { messagingDemo.report(activeThread.id); setToast("Reported to Harmoni’s safety team. Demo only."); }}
+            onReport={() => {
+              messagingDemo.report(activeThread.id);
+              adminDemo.addReport({ kind: "Message", subject: activeThread.name, subjectId: activeThread.personId, reason: "Reported from a conversation", evidence: "Only the context the reporter chose to share. Access to the wider conversation isn’t available until D3 is approved." });
+              setToast("Reported to Harmoni’s safety team. Demo only.");
+            }}
             onBlock={(blocked) => { messagingDemo.setBlocked(activeThread.id, blocked); setToast(blocked ? `${activeThread.name.split(" ")[0]} is blocked.` : "Unblocked."); }}
             onWithdraw={() => {
               const request = connectDemo.requests.find((item) => item.id === activeThread.requestId) ?? connectDemo.connectionWith(activeThread.personId);
@@ -1691,6 +1713,26 @@ function HarmoniAppContent() {
             alertHref="/?alert=n-neha"
             onBack={() => { setActiveTab("notifications"); navigate("home", "notifications"); }}
           />
+        ) : null}
+        {screen === "impact" ? (
+          <ImpactScreen
+            demo={impactDemo}
+            circleName={(id) => findCircle(id)?.name ?? "Circle"}
+            onBack={() => { setActiveTab("you"); navigate("home", "you"); }}
+            onFeedback={(request) => { setFeedbackId(request.id); setFeedbackReturn("impact"); navigate("feedback"); }}
+          />
+        ) : null}
+        {screen === "feedback" && feedbackRequest ? (
+          <FeedbackScreen
+            key={feedbackRequest.id}
+            request={feedbackRequest}
+            circleName={findCircle(feedbackRequest.circleId)?.name ?? "your circle"}
+            onBack={() => feedbackReturn === "impact" ? navigate("impact") : (setActiveTab("notifications"), navigate("home", "notifications"))}
+            onAnswer={(outcome, publicThanks, note) => impactDemo.answer(feedbackRequest.id, outcome, publicThanks, note)}
+          />
+        ) : null}
+        {screen === "admin" ? (
+          <AdminScreen admin={adminDemo} circleDemo={circleDemo} onBack={() => navigate("home")} onToast={setToast} />
         ) : null}
         {screen === "details" ? (
           <DetailsScreen profile={profile} xp={xp} saving={savingCard} onChange={updateText} onBack={() => navigate("auth")} onContinue={() => void continueDetails()} />
@@ -1824,6 +1866,11 @@ function HarmoniAppContent() {
                   onDossier={(persona) => openDossier("home", persona)}
                   onShare={() => openShareEntry()}
                   onOpenContacts={openContacts}
+                />
+                <ImpactEntryCard
+                  people={impactDemo.confirmedPeople}
+                  awaiting={impactDemo.feedback.filter((item) => item.status === "awaiting").length}
+                  onOpen={() => navigate("impact")}
                 />
               </>
             ) : null}
@@ -1959,6 +2006,7 @@ function HarmoniAppContent() {
                     onManage={() => setCircleRoute({ name: "spotlight", id: routedCircle.id, tab: "current" })}
                   />
                 ) : null}
+                contributors={routedCircle.status === "active" || routedCircle.role === "host" ? <TopContributorsCard circle={routedCircle} /> : null}
                 onLinkConsent={(link, allowed) => {
                   circleDemo.setLinkConsent(routedCircle.id, link.id, allowed);
                   setToast(allowed ? `You’re included in matching with ${link.otherName}.` : `You’re no longer matched with ${link.otherName}.`);
@@ -1977,6 +2025,7 @@ function HarmoniAppContent() {
                 onLink={() => { setLinkCircleId(routedCircle.id); navigate("circle-link"); }}
                 onHub={() => setCircleRoute({ name: "hub", id: routedCircle.id })}
                 onSpotlights={() => setCircleRoute({ name: "spotlight", id: routedCircle.id, tab: "current" })}
+                insights={<CircleInsights circle={routedCircle} />}
                 onToast={setToast}
               />
             ) : null}

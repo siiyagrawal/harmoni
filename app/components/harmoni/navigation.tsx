@@ -64,7 +64,7 @@ export function BottomNav({ active, onChange, badges = {} }: { active: Tab; onCh
   );
 }
 
-type MenuAction = "setup" | "design" | "delete-card" | "share" | "qr" | "signature" | "scan" | "access-log" | "seed-data" | "reset" | "signout" | "delete-account";
+type MenuAction = "admin" | "setup" | "design" | "delete-card" | "share" | "qr" | "signature" | "scan" | "access-log" | "seed-data" | "reset" | "signout" | "delete-account";
 const MENU_ROWS: Array<{ icon: IconName; label: string; action: MenuAction; group?: string }> = [
   { icon: "check", label: "Setup guide", action: "setup" },
   { icon: "edit", label: "Design my card", action: "design" },
@@ -74,7 +74,8 @@ const MENU_ROWS: Array<{ icon: IconName; label: string; action: MenuAction; grou
   { icon: "email", label: "Email signature", action: "signature" },
   { icon: "scan", label: "Scan a card", action: "scan", group: "Capturing information" },
   { icon: "check", label: "Who has seen my context", action: "access-log", group: "Your context" },
-  { icon: "close", label: "Start the demo over", action: "reset", group: "Demo" },
+  { icon: "hub", label: "Platform admin (demo)", action: "admin", group: "Demo" },
+  { icon: "close", label: "Start the demo over", action: "reset" },
   { icon: "close", label: "Sign out", action: "signout", group: "Account" },
   { icon: "close", label: "Delete account", action: "delete-account" },
 ];

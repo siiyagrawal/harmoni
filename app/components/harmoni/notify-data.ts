@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 // Phase 4 notification and messaging screens run on this static sample state.
 // Nothing is delivered: no email, push or server queue exists yet.
 
-export type NotificationCategory = "interest" | "match" | "review" | "message" | "spotlight" | "help" | "invite" | "admission" | "hub";
+export type NotificationCategory = "interest" | "match" | "review" | "message" | "spotlight" | "help" | "feedback" | "invite" | "admission" | "hub";
 export type Destination =
   | { type: "request"; id: string }
   | { type: "requests"; filter: "incoming" | "sent" | "review" }
@@ -12,7 +12,8 @@ export type Destination =
   | { type: "thread"; id: string }
   | { type: "circle"; id: string }
   | { type: "spotlight-ask"; circleId: string }
-  | { type: "hub"; circleId: string };
+  | { type: "hub"; circleId: string }
+  | { type: "feedback"; id: string };
 
 export type DemoNotification = {
   id: string;
@@ -50,6 +51,7 @@ export const CATEGORY_LABELS: Record<NotificationCategory, string> = {
   message: "Messages",
   spotlight: "Spotlight",
   help: "Help offers and requests",
+  feedback: "Help follow-ups",
   invite: "Circle invitations",
   admission: "Membership updates",
   hub: "Hub notices",
@@ -63,6 +65,7 @@ const SAMPLE_NOTIFICATIONS: DemoNotification[] = [
   { id: "n-match", category: "match", title: "A new potential connection", detail: "Valley Growers Co-op", at: "5h", read: false, circleId: "valley-growers", destination: { type: "matches" } },
   { id: "n-spotlight", category: "spotlight", title: "You’re featured the week of Oct 13", detail: "Prepare and approve your ask", at: "Yesterday", read: false, circleId: "valley-growers", destination: { type: "spotlight-ask", circleId: "valley-growers" } },
   { id: "n-help", category: "help", title: "Someone offered to help", detail: "Your request: commercial lease clause", at: "Yesterday", read: true, circleId: "sunday-builders", destination: { type: "help" } },
+  { id: "n-feedback", category: "feedback", title: "Did you connect with Daniel Kim?", detail: "Tell us if their help was useful", at: "Today", read: false, circleId: "sunday-builders", destination: { type: "feedback", id: "fb-daniel" } },
   { id: "n-hub", category: "hub", title: "New notice from your Level 2 Admin", detail: "Community Health Hub", at: "Today", read: false, circleId: "health-hub", destination: { type: "hub", circleId: "health-hub" } },
   { id: "n-invite", category: "invite", title: "You’re invited to a circle", detail: "Northside Parents", at: "2 days", read: true, circleId: "northside-parents", destination: { type: "circle", id: "northside-parents" } },
   { id: "n-admission", category: "admission", title: "Your join request was approved", detail: "Legal Help Network · payment required to activate", at: "3 days", read: true, circleId: "legal-help", destination: { type: "circle", id: "legal-help" } },
@@ -84,7 +87,7 @@ export function useNotificationsDemo() {
   const [prefs, setPrefs] = useState<NotificationPrefs>({
     email: false,
     push: false,
-    categories: { interest: "immediate", match: "digest", review: "immediate", message: "immediate", spotlight: "immediate", help: "immediate", invite: "immediate", admission: "immediate", hub: "immediate" },
+    categories: { interest: "immediate", match: "digest", review: "immediate", message: "immediate", spotlight: "immediate", help: "immediate", feedback: "digest", invite: "immediate", admission: "immediate", hub: "immediate" },
     quietHours: { on: true, from: "22:00", to: "07:00" },
     mutedCircles: [],
   });

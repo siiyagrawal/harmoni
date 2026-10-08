@@ -61,7 +61,8 @@ export type DemoCircle = {
   area: string;
   host: string;
   kind: CircleKind;
-  hubStatus?: "requested" | "active";
+  hubStatus?: "requested" | "active" | "revoked";
+  hubLead?: string;
   visibility: CircleVisibility;
   admission: CircleAdmission;
   fee: CircleFee;
@@ -407,6 +408,35 @@ const SAMPLE_CIRCLES: DemoCircle[] = [
   },
 ];
 
+SAMPLE_CIRCLES.push({
+  id: "schools-hub",
+  name: "Riverside Schools Network",
+  purpose: "Parent volunteers across 12 schools, organised by district and school.",
+  category: "Community",
+  area: "Pune",
+  host: "Farida Khan",
+  kind: "hub",
+  hubStatus: "requested",
+  visibility: "private",
+  admission: "invite",
+  fee: { mode: "free" },
+  capacity: null,
+  memberCount: 1,
+  status: "none",
+  role: null,
+  joinCode: "RS-7781",
+  topics: ["Schools", "Volunteering"],
+  guestFields: ["purpose", "host"],
+  available: true,
+  published: false,
+  settings: DEFAULT_SETTINGS,
+  requests: [],
+  invitations: [],
+  members: [],
+  links: [],
+  linkConsent: {},
+});
+
 const SAMPLE_CAPTURES: CapturedCard[] = [
   { id: "cap1", name: "Rohan Malhotra", title: "Operations Lead", company: "GreenCart", email: "rohan@greencart.example", phone: "+91 98200 11223", circleId: "sunday-builders", status: "delivered", capturedAt: "Oct 6", attempts: 1, source: "camera" },
   { id: "cap2", name: "Elena Petrova", title: "Architect", company: "Studio Nine", email: "elena@studio9.exmaple", phone: "", circleId: "sunday-builders", status: "bounced", capturedAt: "Oct 5", attempts: 1, source: "camera" },
@@ -585,6 +615,23 @@ export function useCircleDemo() {
     return circle;
   }
 
+  // Only Harmoni's platform Super Admin enables or revokes a Hub; revoking stops access immediately.
+  function setHubStatus(id: string, hubStatus: "active" | "revoked", lead?: string) {
+    patchCircle(id, (circle) => ({
+      ...circle,
+      hubStatus,
+      hubLead: lead ?? circle.hubLead,
+      published: hubStatus === "active",
+      hub: hubStatus === "active" && !circle.hub ? {
+        myRole: circle.role === "host" ? "super" : "participant",
+        myBranch: "Headquarters",
+        chain: [{ role: "super", name: lead || circle.host }],
+        branches: [],
+        notices: [],
+      } : circle.hub,
+    }));
+  }
+
   function requestLink(fromId: string, toId: string) {
     const target = circles.find((circle) => circle.id === toId);
     if (!target) return;
@@ -654,6 +701,7 @@ export function useCircleDemo() {
     updateSettings,
     createCircle,
     requestLink,
+    setHubStatus,
     setLinkStatus,
     setLinkConsent,
     findDuplicate,

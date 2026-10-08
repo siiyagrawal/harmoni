@@ -10,6 +10,7 @@ const CATEGORY_ICONS: Record<NotificationCategory, IconName> = {
   message: "chat",
   spotlight: "sparkle",
   help: "sparkle",
+  feedback: "check",
   invite: "email",
   admission: "circle",
   hub: "hub",
