@@ -62,7 +62,7 @@ function ActionFooter({ children }: { children: ReactNode }) {
   return <div className="ft mt-10">{children}</div>;
 }
 
-export function WelcomeScreen({ onStart, onSignIn, onPreview }: { onStart: () => void; onSignIn: () => void; onPreview: () => void }) {
+export function WelcomeScreen({ onStart, onSignIn, onPreview, onJoinCode }: { onStart: () => void; onSignIn: () => void; onPreview: () => void; onJoinCode: () => void }) {
   return (
     <>
       <div className="top"><span className="wm">Harmoni</span></div>
@@ -76,6 +76,7 @@ export function WelcomeScreen({ onStart, onSignIn, onPreview }: { onStart: () =>
       <ActionFooter>
         <button className="btn pu" type="button" onClick={onStart}>Explore as a guest</button>
         <button className="lk" type="button" onClick={onPreview}>Preview a circle invite</button>
+        <button className="lk" type="button" onClick={onJoinCode}>I have a join code</button>
         <button className="lk" type="button" onClick={onSignIn}>I already have an account</button>
       </ActionFooter>
     </>

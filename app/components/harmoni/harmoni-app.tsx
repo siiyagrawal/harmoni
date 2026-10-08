@@ -33,14 +33,37 @@ import {
 } from "./screens";
 import {
   GuestCirclePreviewScreen,
+  JoinCodeScreen,
   MatchesLandingScreen,
   NotificationsLandingScreen,
   PersonaHubScreen,
   PersonaOnboardingScreen,
   PersonaPermissionsScreen,
   PersonaReviewScreen,
+  PersonaStartScreen,
   PersonaTypeScreen,
 } from "./phase-one-screens";
+import { DossierScreen } from "./dossier-screen";
+import {
+  CircleDetailScreen,
+  CircleJoinScreen,
+  CircleLinkScreen,
+  CirclesHomeScreen,
+  CreateCircleScreen,
+  HubApplyScreen,
+  HubStructureScreen,
+  ManageCircleScreen,
+  type ManageSection,
+} from "./circle-screens";
+import {
+  CardCaptureScreen,
+  CardInvitesScreen,
+  ScanModeTabs,
+  ShareEntryScreen,
+  type EntryDestination,
+} from "./entry-share-screens";
+import { EMPTY_CIRCLE_DRAFT, joinCodeToCircle, useCircleDemo } from "./circle-data";
+import { Icon } from "./ui";
 import {
   INITIAL_PROFILE,
   type Contact,
@@ -53,6 +76,13 @@ import {
 } from "./types";
 
 const SESSION_KEY = "harmoni_demo_session";
+
+type CircleRoute =
+  | { name: "home" }
+  | { name: "personal" }
+  | { name: "detail"; id: string }
+  | { name: "manage"; id: string; section: ManageSection }
+  | { name: "hub"; id: string };
 
 function toDemoCardPayload(profile: Profile, sessionToken: string, status?: "draft" | "published") {
   const fields = profile.fields
@@ -188,6 +218,16 @@ function HarmoniAppContent() {
   const [toast, setToast] = useState("");
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deletingCard, setDeletingCard] = useState(false);
+  const circleDemo = useCircleDemo();
+  const [circleRoute, setCircleRoute] = useState<CircleRoute>({ name: "home" });
+  const [entryCircleId, setEntryCircleId] = useState("creative-founders");
+  const [joinIntentId, setJoinIntentId] = useState<string | null>(null);
+  const [joinCircleId, setJoinCircleId] = useState<string | null>(null);
+  const [linkCircleId, setLinkCircleId] = useState<string | null>(null);
+  const [scanMode, setScanMode] = useState<"qr" | "card">("qr");
+  const [shareEntryInit, setShareEntryInit] = useState({ personaId: "main", destinationId: "personal", returnTo: "home" as View });
+  const [personaFlowFrom, setPersonaFlowFrom] = useState<View>("welcome");
+  const [dossierReturn, setDossierReturn] = useState<View>("persona-onboarding");
   const restoredDemoUser = useRef<string | null>(null);
   const personaIdCounter = useRef(1);
   const tabScrollPositions = useRef(new Map<Tab, number>());
@@ -320,8 +360,27 @@ function HarmoniAppContent() {
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!hydrated) return;
-    const slug = new URLSearchParams(window.location.search).get("shareback");
+    const params = new URLSearchParams(window.location.search);
+    const slug = params.get("shareback");
     if (slug) setPendingShareBackSlug(slug);
+    // QR codes, NFC tags, shared links and join codes all resolve to the same circle entry.
+    const joinCode = params.get("join");
+    const joinCircle = joinCode ? joinCodeToCircle(circleDemo.circles, joinCode) : undefined;
+    if (joinCircle) {
+      let signedIn = false;
+      try {
+        signedIn = Boolean(localStorage.getItem(SESSION_KEY));
+      } catch {}
+      if (signedIn) {
+        setActiveTab("circles");
+        setCircleRoute({ name: "detail", id: joinCircle.id });
+      } else {
+        setEntryCircleId(joinCircle.id);
+        setScreen("guest-preview");
+      }
+    }
+  // The sample circles are only read once, when an entry link first opens the app.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -520,7 +579,8 @@ function HarmoniAppContent() {
     setProfile((current) => ({ ...current, [field]: value }));
   }
 
-  function startPersonaFlow() {
+  function startPersonaFlow(from: View = demoSession ? "home" : "welcome") {
+    setPersonaFlowFrom(from);
     setAdultConfirmed(false);
     setPersonaDraft({
       type: "business",
@@ -596,7 +656,17 @@ function HarmoniAppContent() {
       ? current.map((persona) => persona.id === id ? preview : persona)
       : [...current, preview]);
     setActivePersonaId(id);
+    setEditingPersonaId(id);
 
+    // The "taking shape" moment is shown only when approved input actually updated the persona.
+    if ([personaDraft.needs, personaDraft.offers, personaDraft.interests].some((value) => value.trim())) {
+      navigate("persona-started");
+      return;
+    }
+    continueAfterPersona();
+  }
+
+  function continueAfterPersona() {
     if (!demoSession) {
       setPersonaGatePending(true);
       setAuthMode("signup");
@@ -608,6 +678,7 @@ function HarmoniAppContent() {
     }
 
     setPersonaGatePending(false);
+    setEditingPersonaId(null);
     if (demoCard) {
       setActiveTab("you");
       navigate("home", "you");
@@ -617,6 +688,31 @@ function HarmoniAppContent() {
     }
   }
 
+  function openDossier(returnTo: View, persona?: PersonaPreview) {
+    if (persona) {
+      setPersonaDraft({ ...persona, publicFields: [...persona.publicFields] });
+      setEditingPersonaId(persona.id);
+    }
+    setDossierReturn(returnTo);
+    navigate("dossier");
+  }
+
+  function applyDossier(facts: string[], targetId: string) {
+    const addBackground = (interests: string) => facts.length
+      ? [interests.trim(), `Background: ${facts.join("; ")}`].filter(Boolean).join("\n").slice(0, 500)
+      : interests;
+    const target = personaPreviews.find((persona) => persona.id === targetId);
+    if (target && targetId !== editingPersonaId) {
+      const updated = { ...target, interests: addBackground(target.interests) };
+      setPersonaPreviews((current) => current.map((persona) => persona.id === targetId ? updated : persona));
+      setPersonaDraft({ ...updated, publicFields: [...updated.publicFields] });
+      setEditingPersonaId(targetId);
+    } else {
+      setPersonaDraft((current) => ({ ...current, interests: addBackground(current.interests) }));
+    }
+    navigate("persona-onboarding");
+  }
+
   function removePersonaPreview(id: string) {
     setPersonaPreviews((current) => current.filter((persona) => persona.id !== id));
     setActivePersonaId((current) => current === id ? null : current);
@@ -624,6 +720,8 @@ function HarmoniAppContent() {
   }
 
   function clearPersonaPreviews() {
+    setJoinIntentId(null);
+    setCircleRoute({ name: "home" });
     setPersonaPreviews([]);
     setActivePersonaId(null);
     setEditingPersonaId(null);
@@ -681,7 +779,8 @@ function HarmoniAppContent() {
       setActiveTab("you");
       setPersonaGatePending(false);
       if (result.hasCard) {
-        navigate("home", "you");
+        if (joinIntentId) setActiveTab("circles");
+        navigate("home", joinIntentId ? "circles" : "you");
       } else {
         setProfile(INITIAL_PROFILE);
         navigate("details");
@@ -771,8 +870,9 @@ function HarmoniAppContent() {
       setSavingCard(false);
     }
     setCircleName(name);
-    setActiveTab("you");
-    navigate("home", "you");
+    const landingTab: Tab = joinIntentId ? "circles" : "you";
+    setActiveTab(landingTab);
+    navigate("home", landingTab);
   }
 
   async function continueLogo() {
@@ -781,7 +881,7 @@ function HarmoniAppContent() {
       setProfile(await persistDemoProfile(profile, "draft"));
       navigate("photo");
     } catch (error) {
-      setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Your card couldnâ€™t be saved.");
+      setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Your card couldn’t be saved.");
     } finally {
       setSavingCard(false);
     }
@@ -794,7 +894,7 @@ function HarmoniAppContent() {
       setProfile(await persistDemoProfile(profile, status));
       navigate(returnTo);
     } catch (error) {
-      setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Your card couldnâ€™t be saved.");
+      setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Your card couldn’t be saved.");
     } finally {
       setSavingCard(false);
     }
@@ -826,7 +926,7 @@ function HarmoniAppContent() {
       navigate("auth");
       setToast("Your account was deleted.");
     } catch (error) {
-      setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Your account couldnâ€™t be deleted. Try again.");
+      setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Your account couldn’t be deleted. Try again.");
     } finally {
       setDeletingAccount(false);
     }
@@ -981,7 +1081,48 @@ function HarmoniAppContent() {
     }
   }
 
+  // Destinations a person may share an entry to or invite a captured contact into.
+  const entryDestinations: EntryDestination[] = [
+    { id: "personal", name: `${myCircle?.name || profile.circle || "My circle"} (personal)`, code: null, url: profile.publicUrl || null },
+    ...circleDemo.circles
+      .filter((circle) => circle.published && circle.kind === "general"
+        && (circle.role === "host" || (circle.status === "active" && circle.settings.whoCanInvite === "members")))
+      .map((circle) => ({ id: circle.id, name: circle.name, code: circle.joinCode, url: null })),
+  ];
+
+  const findCircle = (id: string | null) => circleDemo.circles.find((circle) => circle.id === id) ?? null;
+  const entryCircle = findCircle(entryCircleId);
+  const joinIntent = findCircle(joinIntentId);
+  const joinCircle = findCircle(joinCircleId);
+  const linkCircle = findCircle(linkCircleId);
+  const routedCircle = circleRoute.name === "detail" || circleRoute.name === "manage" || circleRoute.name === "hub" ? findCircle(circleRoute.id) : null;
+
+  function openShareEntry(destinationId = "personal", personaId = activePersonaId ?? "main") {
+    setShareEntryInit({ personaId, destinationId, returnTo: screen });
+    navigate("share-entry");
+  }
+
+  function openCircle(id: string) {
+    if (typeof window !== "undefined") tabScrollPositions.current.set("circles", window.scrollY);
+    setCircleRoute({ name: "detail", id });
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }
+
+  function circleHome() {
+    setCircleRoute({ name: "home" });
+    window.requestAnimationFrame(() => window.scrollTo({ top: tabScrollPositions.current.get("circles") ?? 0, behavior: "auto" }));
+  }
+
+  function startJoin(id: string) {
+    setJoinCircleId(id);
+    navigate("circle-join");
+  }
+
   function changeTab(tab: Tab) {
+    if (tab === "circles" && activeTab === "circles" && circleRoute.name !== "home") {
+      circleHome();
+      return;
+    }
     if (typeof window !== "undefined") tabScrollPositions.current.set(activeTab, window.scrollY);
     setActiveTab(tab);
     setQuery("");
@@ -1031,8 +1172,9 @@ function HarmoniAppContent() {
     <>
       <main className={`app${screen === "welcome" ? " welcome in" : screen === "auth" ? " auth in" : " in"}`}>
         {screen === "welcome" ? <WelcomeScreen
-          onStart={startPersonaFlow}
-          onPreview={() => navigate("guest-preview")}
+          onStart={() => startPersonaFlow("welcome")}
+          onPreview={() => { setEntryCircleId("creative-founders"); navigate("guest-preview"); }}
+          onJoinCode={() => navigate("join-code")}
           onSignIn={() => {
             setAuthMode("signin");
             setAuthError("");
@@ -1041,10 +1183,33 @@ function HarmoniAppContent() {
             navigate("auth");
           }}
         /> : null}
-        {screen === "guest-preview" ? <GuestCirclePreviewScreen onBack={() => navigate("welcome")} onContinue={startPersonaFlow} /> : null}
+        {screen === "join-code" ? (
+          <JoinCodeScreen
+            onBack={() => navigate("welcome")}
+            onResolve={(code) => {
+              const circle = joinCodeToCircle(circleDemo.circles, code);
+              if (!circle) return "We couldn’t find an active circle for that code. Check it and try again.";
+              setEntryCircleId(circle.id);
+              navigate("guest-preview");
+              return null;
+            }}
+          />
+        ) : null}
+        {screen === "guest-preview" && entryCircle ? (
+          <GuestCirclePreviewScreen
+            circle={entryCircle}
+            onBack={() => navigate("welcome")}
+            onContinue={() => {
+              const joinable = entryCircle.available && entryCircle.published
+                && !(entryCircle.capacity !== null && entryCircle.memberCount >= entryCircle.capacity);
+              setJoinIntentId(joinable ? entryCircle.id : null);
+              startPersonaFlow("guest-preview");
+            }}
+          />
+        ) : null}
         {screen === "auth" ? (
           <>
-            {personaGatePending ? <div className="card p1-static-notice p1-auth-context-note"><b>Your persona draft is ready</b><p>Finish creating your demo account to continue. Persona details are a session-only preview in this phase; your existing card flow keeps its current save behavior.</p></div> : null}
+            {personaGatePending ? <div className="card p1-static-notice p1-auth-context-note"><b>Verify to save your persona</b><p>Create your demo account to keep your persona draft.{joinIntent ? ` Saving doesn’t join ${joinIntent.name}; you’ll confirm joining next.` : ""} Persona details are a session-only preview in this phase; your existing card flow keeps its current save behavior.</p></div> : null}
             <DemoAuthScreen
               mode={authMode}
               username={authUsername}
@@ -1079,7 +1244,7 @@ function HarmoniAppContent() {
             name={personaDraft.name}
             onSelect={changePersonaType}
             onName={(name) => setPersonaDraft((current) => ({ ...current, name }))}
-            onBack={() => navigate("welcome")}
+            onBack={() => navigate(personaFlowFrom, "you")}
             onContinue={() => navigate("persona-permissions")}
           />
         ) : null}
@@ -1096,20 +1261,114 @@ function HarmoniAppContent() {
         {screen === "persona-onboarding" ? (
           <PersonaOnboardingScreen
             draft={personaDraft}
+            circleContext={joinIntent}
             onChange={updatePersonaDraft}
-            onBack={() => navigate("persona-permissions")}
+            onBack={() => demoSession && editingPersonaId && personaPreviews.some((persona) => persona.id === editingPersonaId)
+              ? navigate("home", "you")
+              : navigate("persona-permissions")}
             onReview={() => navigate("persona-review")}
+            onDossier={() => openDossier("persona-onboarding")}
           />
         ) : null}
         {screen === "persona-review" ? (
           <PersonaReviewScreen
             draft={personaDraft}
+            joinIntent={demoSession ? null : joinIntent}
             onChange={updatePersonaDraft}
             onVisibility={(visibility) => setPersonaDraft((current) => ({ ...current, visibility }))}
             onTogglePublicField={togglePersonaPublicField}
             onBack={() => navigate("persona-onboarding")}
             onDiscard={discardPersonaDraft}
             onConfirm={confirmPersonaPreview}
+          />
+        ) : null}
+        {screen === "persona-started" ? (
+          <PersonaStartScreen draft={personaDraft} guest={!demoSession} onContinue={continueAfterPersona} />
+        ) : null}
+        {screen === "dossier" ? (
+          <DossierScreen
+            initialEmail={profile.email}
+            displayName={profile.name}
+            targets={[
+              { id: editingPersonaId ?? "draft", name: personaDraft.name || "This persona" },
+              ...personaPreviews.filter((persona) => persona.id !== editingPersonaId).map((persona) => ({ id: persona.id, name: persona.name })),
+            ]}
+            onCancel={() => navigate(dossierReturn, "you")}
+            onManual={() => navigate("persona-onboarding")}
+            onComplete={applyDossier}
+          />
+        ) : null}
+        {screen === "circle-create" ? (
+          <CreateCircleScreen
+            draft={circleDemo.createDraft}
+            onDraft={circleDemo.setCreateDraft}
+            onBack={() => navigate("home", "circles")}
+            onHubApply={() => navigate("hub-apply")}
+            onPublish={(kind) => {
+              const circle = circleDemo.createCircle(circleDemo.createDraft, kind);
+              circleDemo.setSegment("hosting");
+              setActiveTab("circles");
+              setCircleRoute({ name: "manage", id: circle.id, section: "invites" });
+              navigate("home", "circles");
+              setToast(circle.published ? `${circle.name} is published.` : `${circle.name} saved as a draft.`);
+            }}
+          />
+        ) : null}
+        {screen === "hub-apply" ? (
+          <HubApplyScreen
+            applicantName={profile.name}
+            onBack={() => navigate("circle-create")}
+            onSubmitted={(name, purpose) => {
+              const circle = circleDemo.createCircle({ ...EMPTY_CIRCLE_DRAFT, name, purpose, visibility: "private", admission: "invite" }, "hub");
+              circleDemo.setSegment("hosting");
+              setActiveTab("circles");
+              setCircleRoute({ name: "detail", id: circle.id });
+              navigate("home", "circles");
+              setToast("Hub requested. It stays inactive until Harmoni enables it.");
+            }}
+          />
+        ) : null}
+        {screen === "circle-join" && joinCircle ? (
+          <CircleJoinScreen
+            circle={joinCircle}
+            personas={["Main card", ...personaPreviews.map((persona) => persona.name)]}
+            onBack={() => navigate("home", "circles")}
+            onSubmit={(persona) => {
+              const outcome = circleDemo.join(joinCircle.id, persona);
+              if (joinIntentId === joinCircle.id) setJoinIntentId(null);
+              return outcome;
+            }}
+            onOpenCircle={() => { setActiveTab("circles"); setCircleRoute({ name: "detail", id: joinCircle.id }); navigate("home", "circles"); }}
+            onDone={() => { setActiveTab("circles"); circleDemo.setSegment("joined"); setCircleRoute({ name: "home" }); navigate("home", "circles"); }}
+          />
+        ) : null}
+        {screen === "circle-link" && linkCircle ? (
+          <CircleLinkScreen
+            circle={linkCircle}
+            candidates={circleDemo.circles.filter((circle) => circle.id !== linkCircle.id && circle.published && circle.kind === "general"
+              && !linkCircle.links.some((link) => link.otherCircleId === circle.id && link.status !== "disconnected"))}
+            onBack={() => { setCircleRoute({ name: "manage", id: linkCircle.id, section: "connections" }); navigate("home", "circles"); }}
+            onRequest={(targetId) => circleDemo.requestLink(linkCircle.id, targetId)}
+          />
+        ) : null}
+        {screen === "share-entry" ? (
+          <ShareEntryScreen
+            profile={profile}
+            personas={personaPreviews}
+            destinations={entryDestinations}
+            initialPersonaId={shareEntryInit.personaId}
+            initialDestinationId={shareEntryInit.destinationId}
+            onBack={() => navigate(shareEntryInit.returnTo)}
+          />
+        ) : null}
+        {screen === "card-capture" ? (
+          <CardCaptureScreen
+            senderName={profile.name}
+            destinations={entryDestinations}
+            findDuplicate={(name, email) => circleDemo.findDuplicate(name, email)}
+            onSave={(capture, replaceId) => { circleDemo.saveCapture(capture, replaceId); }}
+            onBack={() => navigate("home", "scan")}
+            onDone={() => navigate("home", "scan")}
           />
         ) : null}
         {screen === "details" ? (
@@ -1235,10 +1494,12 @@ function HarmoniAppContent() {
                   personas={personaPreviews}
                   selectedId={activePersonaId}
                   onSelect={setActivePersonaId}
-                  onCreate={startPersonaFlow}
+                  onCreate={() => startPersonaFlow("home")}
                   onEdit={editPersonaPreview}
                   onAddMore={addMorePersonaContext}
                   onDelete={removePersonaPreview}
+                  onDossier={(persona) => openDossier("home", persona)}
+                  onShare={() => openShareEntry()}
                   onOpenContacts={openContacts}
                 />
               </>
@@ -1279,11 +1540,75 @@ function HarmoniAppContent() {
                 <ContactCardScreen contact={selectedContact} onBack={() => setContactView("detail")} />
               </ScreenErrorBoundary>
             ) : null}
-            {activeTab === "scan" ? <ScanScreen onScan={handleScannedLink} /> : null}
-            {activeTab === "matches" ? <MatchesLandingScreen onCreateContext={startPersonaFlow} /> : null}
+            {activeTab === "scan" ? <ScanModeTabs mode={scanMode} onMode={setScanMode} /> : null}
+            {activeTab === "scan" && scanMode === "qr" ? <ScanScreen onScan={handleScannedLink} /> : null}
+            {activeTab === "scan" && scanMode === "card" ? (
+              <CardInvitesScreen
+                captures={circleDemo.captures}
+                circleName={(id) => id ? entryDestinations.find((item) => item.id === id)?.name ?? findCircle(id)?.name ?? "Circle" : "Harmoni only"}
+                onCapture={() => navigate("card-capture")}
+                onRetry={(id, email) => { circleDemo.retryCapture(id, email); setToast("Retry queued on the same record. Demo only: no email is sent."); }}
+                onRemove={(id) => { circleDemo.removeCapture(id); setToast("Pending record deleted."); }}
+              />
+            ) : null}
+            {activeTab === "matches" ? <MatchesLandingScreen onCreateContext={() => startPersonaFlow("home")} /> : null}
             {activeTab === "notifications" ? <NotificationsLandingScreen /> : null}
-            {activeTab === "circles" ? (
+            {activeTab === "circles" && circleRoute.name === "home" ? (
+              <CirclesHomeScreen
+                demo={circleDemo}
+                personal={{
+                  name: myCircle?.name || profile.circle || "My circle",
+                  members: myCircle?.members.length ?? contacts.length + 1,
+                  waiting: (exchangeInbox?.length ?? 0) + (introInbox?.length ?? 0),
+                }}
+                joinIntent={joinIntent}
+                onOpenPersonal={() => { tabScrollPositions.current.set("circles", window.scrollY); setCircleRoute({ name: "personal" }); window.scrollTo({ top: 0 }); }}
+                onOpenCircle={openCircle}
+                onCreate={() => navigate("circle-create")}
+                onResumeJoin={() => joinIntent && startJoin(joinIntent.id)}
+                onDismissIntent={() => setJoinIntentId(null)}
+              />
+            ) : null}
+            {activeTab === "circles" && routedCircle && circleRoute.name === "detail" ? (
+              <CircleDetailScreen
+                circle={routedCircle}
+                onBack={circleHome}
+                onJoin={() => startJoin(routedCircle.id)}
+                onWithdraw={() => { circleDemo.withdraw(routedCircle.id); setToast("Request withdrawn."); }}
+                onLeave={() => { circleDemo.leave(routedCircle.id); setToast(`You left ${routedCircle.name}.`); }}
+                onDeclineInvite={() => { circleDemo.declineInvitation(routedCircle.id); setToast("Invitation declined."); }}
+                onManage={() => setCircleRoute({ name: "manage", id: routedCircle.id, section: "requests" })}
+                onShare={() => openShareEntry(routedCircle.id)}
+                onHub={() => setCircleRoute({ name: "hub", id: routedCircle.id })}
+                onLinkConsent={(link, allowed) => {
+                  circleDemo.setLinkConsent(routedCircle.id, link.id, allowed);
+                  setToast(allowed ? `You’re included in matching with ${link.otherName}.` : `You’re no longer matched with ${link.otherName}.`);
+                }}
+              />
+            ) : null}
+            {activeTab === "circles" && routedCircle && circleRoute.name === "manage" ? (
+              <ManageCircleScreen
+                key={routedCircle.id}
+                circle={routedCircle}
+                demo={circleDemo}
+                section={circleRoute.section}
+                onSection={(section) => setCircleRoute({ name: "manage", id: routedCircle.id, section })}
+                onBack={() => setCircleRoute({ name: "detail", id: routedCircle.id })}
+                onShare={() => openShareEntry(routedCircle.id)}
+                onLink={() => { setLinkCircleId(routedCircle.id); navigate("circle-link"); }}
+                onHub={() => setCircleRoute({ name: "hub", id: routedCircle.id })}
+                onToast={setToast}
+              />
+            ) : null}
+            {activeTab === "circles" && routedCircle && circleRoute.name === "hub" ? (
+              <HubStructureScreen circle={routedCircle} onBack={() => setCircleRoute({ name: "detail", id: routedCircle.id })} />
+            ) : null}
+            {activeTab === "circles" && circleRoute.name !== "home" && circleRoute.name !== "personal" && !routedCircle ? (
+              <div className="card p1-empty-state"><h2>This circle isn’t available</h2><p>It may have been removed or you no longer have access.</p><button className="btn g s" type="button" onClick={circleHome}>Back to circles</button></div>
+            ) : null}
+            {activeTab === "circles" && circleRoute.name === "personal" ? (
               <ScreenErrorBoundary section="your circle">
+                <div className="p2-subheader"><button className="bkb" type="button" onClick={circleHome} aria-label="Back to circles"><Icon name="back" /></button><span className="tag">Personal circle</span><span className="header-spacer" /></div>
                 <CircleScreen
                   profile={profile}
                   contacts={contacts}

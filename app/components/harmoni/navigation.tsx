@@ -34,7 +34,7 @@ const NAV_ITEMS: Array<{ id: Tab; title: string; icon: IconName }> = [
   { id: "circles", title: "Circles", icon: "circle" },
   { id: "scan", title: "Scan", icon: "scan" },
   { id: "matches", title: "Matches", icon: "sparkle" },
-  { id: "notifications", title: "Updates", icon: "bell" },
+  { id: "notifications", title: "Notifications", icon: "bell" },
   { id: "you", title: "You", icon: "person" },
 ];
 
