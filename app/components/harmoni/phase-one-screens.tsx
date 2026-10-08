@@ -92,12 +92,13 @@ export function JoinCodeScreen({ onBack, onResolve }: { onBack: () => void; onRe
       <div className="p1-shield"><Icon name="qr" size={28} /></div>
       <h1>Enter your<br /><i>join code.</i></h1>
       <p>QR codes, NFC tags, shared links and join codes all open the same circle invitation.</p>
-      <form onSubmit={submit}>
+      <form id="join-code-form" onSubmit={submit}>
         <label className="f"><span>Join code</span><input value={code} onChange={(event) => setCode(event.target.value)} placeholder="For example, CF-4821" autoCapitalize="characters" maxLength={12} /></label>
         {error ? <p className="auth-error" role="alert">{error}</p> : null}
         <p className="p2-fine">Sample codes: CF-4821 (approval), RM-1150 (full), MC-3318 (open).</p>
-        <div className="ft"><button className="btn" type="submit" disabled={!code.trim()}>Open invitation</button></div>
       </form>
+      {/* Kept outside the form: an animated parent would otherwise anchor this fixed footer over the field. */}
+      <div className="ft"><button className="btn" type="submit" form="join-code-form" disabled={!code.trim()}>Open invitation</button></div>
     </>
   );
 }

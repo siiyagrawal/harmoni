@@ -399,6 +399,38 @@
   letter-spacing: -0.02em;
 }
 
+/* Field icons size to their text unless given a box, which made short labels like "in" a thin strip. */
+.fe > .bi {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  font-size: 15px;
+}
+
+.fr .bi {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+}
+
+/* Card back: the QR panel spans the card, and the code is capped by the card's height. */
+.pk {
+  container-type: size;
+}
+
+.pk .qp {
+  width: calc(100% - 32px);
+  padding: 18px;
+}
+
+.pk .qrw {
+  width: min(100%, calc(100cqh - 150px));
+}
+
+.pk .qrw svg {
+  height: auto;
+}
+
 .contact-button:focus-visible {
   outline-offset: -3px;
 }

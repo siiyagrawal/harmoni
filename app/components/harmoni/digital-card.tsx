@@ -46,7 +46,7 @@ export default function DigitalCard({
 
   return (
     <div
-      className={`pass${flipped && canFlip ? " fl" : ""}`}
+      className={`pass${flipped && canFlip ? " flipped" : ""}`}
       onClick={() => canFlip && setFlipped((value) => !value)}
       onPointerMove={tilt}
       onPointerLeave={resetTilt}
