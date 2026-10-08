@@ -4,6 +4,8 @@ import {
   CIRCLE_AREAS,
   CIRCLE_CATEGORIES,
   HUB_APPLICATION_EMAIL,
+  INVITE_EXPIRY_OPTIONS,
+  type InviteExpiry,
   admissionLabel,
   feeLabel,
   isFull,
@@ -660,6 +662,8 @@ export function ManageCircleScreen({
   onToast: (message: string) => void;
 }) {
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteExpiry, setInviteExpiry] = useState<InviteExpiry>("7 days");
+  const [linkExpiry, setLinkExpiry] = useState<InviteExpiry>("30 days");
   const [removeId, setRemoveId] = useState<string | null>(null);
   const [settings, setSettings] = useState({
     visibility: circle.visibility,
@@ -750,13 +754,14 @@ export function ManageCircleScreen({
           <form className="card p2-code-form" onSubmit={(event) => {
             event.preventDefault();
             if (!/^\S+@\S+\.\S+$/.test(inviteEmail)) return;
-            demo.addEmailInvitation(circle.id, inviteEmail.trim().toLowerCase());
+            demo.addEmailInvitation(circle.id, inviteEmail.trim().toLowerCase(), inviteExpiry);
             setInviteEmail("");
             onToast("Invitation queued. Demo only: no email is sent.");
           }}>
             <b>Invite one person by email</b>
             <p className="p2-fine">A personal invitation for one person. They become a member only if they accept, and we never import their profile.</p>
             <label className="f"><span>Email</span><input type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="name@example.com" /></label>
+            <label className="p2-select-row"><span>Expires</span><select value={inviteExpiry} onChange={(event) => setInviteExpiry(event.target.value as InviteExpiry)}>{INVITE_EXPIRY_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label>
             <button className="btn s" type="submit" disabled={!/^\S+@\S+\.\S+$/.test(inviteEmail) || hubInactive}>Send invitation</button>
           </form>
           <h2 className="p1-section-title">Invitations</h2>
@@ -770,7 +775,8 @@ export function ManageCircleScreen({
             ))}
             {!circle.invitations.length ? <p className="p2-fine p2-list-note">No invitations yet.</p> : null}
           </div>
-          <button className="btn g s" type="button" onClick={() => { demo.regenerateLink(circle.id); onToast("New link and join code created. The old ones stopped working."); }}>Replace reusable link and code</button>
+          <label className="p2-select-row p6-link-expiry"><span>New link expires</span><select value={linkExpiry} onChange={(event) => setLinkExpiry(event.target.value as InviteExpiry)}>{INVITE_EXPIRY_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label>
+          <button className="btn g s" type="button" onClick={() => { demo.regenerateLink(circle.id, linkExpiry); onToast("New link and join code created. The old ones stopped working."); }}>Replace reusable link and code</button>
           <p className="p2-fine">Reusable links and join codes can be used by anyone who has them; opening one isn’t admission. Who can invite: {circle.settings.whoCanInvite === "host" ? "only you" : "any active member"}.</p>
         </>
       ) : null}

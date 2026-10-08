@@ -67,12 +67,12 @@ The screens below use static sample data held in memory. Nothing is sent or stor
 
 | Test | Where to demonstrate it |
 |---|---|
-| A01 Entry | Welcome → **I have a join code**: `CF-4821` (approval), `RM-1150` (full), `MC-3318` (open). `/?join=CF-4821` opens the same entry. Answer as a guest, verify, then use the **Finish joining** banner under Circles. Saving alone doesn't join. |
+| A01 Entry | Welcome → **I have a join code**: `CF-4821` (approval), `RM-1150` (full), `MC-3318` (open). `/?join=CF-4821` opens the same entry. Answer as a guest; after "taking shape", **See who could help** shows an anonymous preview and the explicit *Save and join* / *Save only* choice. Sign-up requires 18+ and a verified email (demo code `731402`). Saving alone doesn't join. |
 | A02 Persona | First answer mentioning an attorney, a tractor/farm or finance gets a tailored follow-up. **Build a draft from my sources** runs the self-dossier; cancelling clears it. "Taking shape" appears only after real answers. A Dating persona gets no circle matches. |
 | A03 Circles | Circles → Create a circle (paid saves as a draft), Discover filters, circle detail join outcomes, Host settings → Connections (link, simulate approval, disconnect). |
-| A04 Cards | Scan → Business card: manual entry with "Rohan Malhotra" shows the duplicate check; a bounced invite retries on the same record. |
-| A05 Requests | Matches → I'm interested (host-first in Valley Growers), Requests → Received → Review → choose messaging/email/phone separately. Tom's request fails the access recheck. |
-| A06 Alerts | Notifications: grouped requests, Omar's withdrawn request resolves in place, Settings → quiet hours, mute, delivery history, **Open from this alert** (`/?alert=n-neha`, works signed out). |
+| A04 Cards | Scan → Business card: manual entry with "Rohan Malhotra" shows the duplicate check; a bounced invite retries on the same record. After sending, **Preview what they'll see**; the recipient's page is also at `/?invite=SB-INV-JORDAN`. |
+| A05 Requests | Matches shows one person at a time → Interested / Not now (host-first in Valley Growers), Requests → Received → Review → choose messaging/email/phone separately. Tom's request fails the access recheck. |
+| A06 Alerts | Notifications: grouped requests, Omar's withdrawn request resolves in place, Settings → quiet hours, mute, delivery history. Connection requests are in-app only. `/?alert=n-neha` opens the exact request, after sign-in if needed. |
 | A07 Messaging | Header chat icon → Aarav: send, menu → Simulate connection loss → send → Reconnect → Retry (one copy). |
 | A08 Access loss | In Aarav's thread: Block (read-only until unblocked) or Withdraw connection (history stays read-only). Platform admin → Hubs → Revoke the Health Hub, then open the Hub thread: sending stops. Signing out clears every sample conversation. |
 | A09 Spotlight | Valley Growers → Prepare my ask; Sunday Builders → Host settings → Manage Spotlights; You → Your impact → answer Daniel's follow-up (credits once). |

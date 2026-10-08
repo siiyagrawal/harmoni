@@ -62,6 +62,8 @@ export function GuestCirclePreviewScreen({
         <div><small>Joining</small><b>{admissionLabel(circle.admission)}</b></div>
         <div><small>Fee</small><b>{feeLabel(circle.fee)}</b></div>
         <div><small>Capacity</small><b>{circle.capacity ? `${circle.memberCount} of ${circle.capacity} places` : "No limit"}</b></div>
+        <div><small>Type</small><b>{circle.kind === "hub" ? "Hub Circle" : "General Circle"}</b></div>
+        <div><small>Joins as</small><b>{circle.category === "Family" ? "A Family persona" : "A Business persona"}</b></div>
       </div>
       {circle.fee.mode === "paid" ? <p className="p2-fine">{circle.fee.terms} This circle fee is separate from Harmoni Premium.</p> : null}
       <div className="card p1-preview-access"><Icon name="lock" size={19} /><div><b>Member details stay private</b><p>Guests see the circle’s purpose and rules only. You can’t send interest, message or see contact details until you’re a verified, active member.</p></div></div>
@@ -407,18 +409,34 @@ export function PersonaStartScreen({
   draft,
   guest,
   onContinue,
+  onBackToReview,
 }: {
   draft: PersonaDraft;
   guest: boolean;
   onContinue: () => void;
+  onBackToReview: () => void;
 }) {
-  const [status, setStatus] = useState<"updating" | "done">("updating");
+  const [status, setStatus] = useState<"updating" | "done" | "failed">("updating");
+  const [attempt, setAttempt] = useState(0);
   const added = [draft.needs, draft.offers, draft.interests].filter((value) => value.trim()).length;
 
+  // The confirmation only appears once the update succeeds; without a connection it fails honestly.
   useEffect(() => {
-    const timeout = window.setTimeout(() => setStatus("done"), 1300);
+    const timeout = window.setTimeout(() => setStatus(navigator.onLine ? "done" : "failed"), 1300);
     return () => window.clearTimeout(timeout);
-  }, []);
+  }, [attempt]);
+
+  if (status === "failed") {
+    return (
+      <>
+        <div className="p1-shield"><Icon name="close" size={26} /></div>
+        <h1 className="p2-center">We couldn’t update<br /><i>your persona.</i></h1>
+        <p className="c">Nothing was lost. Your answers are still in this draft. Check your connection and try again.</p>
+        <button className="lk p2-bottom-space" type="button" onClick={onBackToReview}>Back to my answers</button>
+        <div className="ft"><button className="btn" type="button" onClick={() => { setStatus("updating"); setAttempt((value) => value + 1); }}>Try again</button></div>
+      </>
+    );
+  }
 
   if (status === "updating") {
     return (
@@ -442,7 +460,7 @@ export function PersonaStartScreen({
         <div><Icon name="lock" size={17} /><span>{guest ? "Held as a temporary guest draft until you verify" : "Private until you choose who may use it"}</span></div>
       </div>
       <p className="p2-fine c">This is a developing profile—not a finished digital person, an avatar, or a separately trained model.</p>
-      <div className="ft"><button className="btn" type="button" onClick={onContinue}>{guest ? "Verify to save my persona" : "Continue"}</button></div>
+      <div className="ft"><button className="btn" type="button" onClick={onContinue}>{guest ? "See who could help" : "Continue"}</button></div>
     </>
   );
 }
@@ -539,5 +557,152 @@ export function PersonaHubScreen({
       {!personas.length ? <div className="card p1-empty-personas"><div className="p1-shield small"><Icon name="sparkle" size={21} /></div><b>One persona, or a few</b><p>Keep work, personal, and other parts of your life in separate spaces.</p><button className="btn g s" type="button" onClick={onCreate}>Create your first persona</button></div> : null}
       <p className="p1-demo-caption">Switching shows only the selected persona; others stay hidden. Persona switching and editing are UI previews in this phase. Your existing card remains connected to your account.</p>
     </section>
+  );
+}
+
+export function GuestValueScreen({
+  draft,
+  circle,
+  choice,
+  onChoice,
+  onBack,
+  onVerify,
+}: {
+  draft: PersonaDraft;
+  circle: DemoCircle | null;
+  choice: "join" | "save";
+  onChoice: (choice: "join" | "save") => void;
+  onBack: () => void;
+  onVerify: () => void;
+}) {
+  // An anonymous estimate from permitted context: themes and a count, never names or anyone's private needs.
+  const text = `${draft.needs} ${draft.offers}`.toLowerCase();
+  const themes = circle
+    ? circle.topics.slice(0, 3)
+    : /farm|tractor|land|harvest/.test(text) ? ["Equipment", "Land"] : /law|legal|attorney|lease/.test(text) ? ["Contracts", "Property"] : ["Advice", "Introductions"];
+  const count = circle ? Math.max(2, Math.min(6, Math.round(circle.memberCount / 12))) : 4;
+  const blocked = circle ? !circle.available || !circle.published || isFull(circle) : true;
+  return (
+    <>
+      <div className="hd">
+        <button className="bkb" type="button" onClick={onBack} aria-label="Back"><Icon name="back" /></button>
+        <span className="tag">Before you verify</span>
+      </div>
+      <span className="p1-eyebrow">A preview of what’s possible</span>
+      <h1>People here could<br /><i>help with this.</i></h1>
+      <div className="card p6-value">
+        <b>{count} {circle ? `members of ${circle.name}` : "people in public circles"}</b>
+        <p>offer something close to what you described.</p>
+        <div className="p1-invite-topics">{themes.map((theme) => <span key={theme}>{theme}</span>)}</div>
+        <div className="p6-locked" aria-hidden="true"><i /><i /><i /></div>
+        <p className="p2-fine">Names, details and requests unlock only after you verify and become an active member. This is an estimate, not a promise.</p>
+      </div>
+      {circle && !blocked ? (
+        <>
+          <h2 className="p1-section-title">After you verify</h2>
+          <div className="p1-visibility-list">
+            {([
+              ["join", `Save my persona and join ${circle.name}`, circle.admission === "approval" ? "You’ll review its rules and send a join request" : "You’ll review its rules and confirm joining"],
+              ["save", "Save my persona only", "You won’t join yet; you can join later from Circles"],
+            ] as const).map(([value, title, detail]) => (
+              <button type="button" key={value} className={`p1-visibility-option${choice === value ? " selected" : ""}`} onClick={() => onChoice(value)} aria-pressed={choice === value}>
+                <span className="p1-radio" aria-hidden="true">{choice === value ? "✓" : ""}</span>
+                <span><b>{title}</b><small>{detail}</small></span>
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
+      <p className="p2-fine p2-bottom-space">Verifying saves your persona. It never joins a circle on its own.</p>
+      <div className="ft"><button className="btn" type="button" onClick={onVerify}>Verify to save</button></div>
+    </>
+  );
+}
+
+const DEMO_EMAIL_CODE = "731402";
+
+export function VerifyEmailScreen({ initialEmail, onVerified }: { initialEmail: string; onVerified: (email: string) => void }) {
+  const [email, setEmail] = useState(initialEmail);
+  const [sent, setSent] = useState(false);
+  const [code, setCode] = useState("");
+  const [error, setError] = useState("");
+  const valid = /^\S+@\S+\.\S+$/.test(email);
+  return (
+    <>
+      <div className="hd"><span className="tag">Verify your email</span></div>
+      <div className="p1-shield"><Icon name="email" size={28} /></div>
+      <h1>Verify your<br /><i>email.</i></h1>
+      <p>A verified email lets you save, join circles, publish and send invitations. It also helps you recover your account.</p>
+      <label className="f"><span>Email</span><input type="email" value={email} onChange={(event) => { setEmail(event.target.value); setSent(false); setCode(""); }} placeholder="name@example.com" autoComplete="email" /></label>
+      {sent ? (
+        <>
+          <label className="f"><span>6-digit code</span><input value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))} inputMode="numeric" maxLength={6} autoComplete="one-time-code" /></label>
+          <p className="auth-reset-code" role="status">Demo code: <b>{DEMO_EMAIL_CODE}</b> · no email is sent · single use, expires in 10 minutes (proposed)</p>
+          {error ? <p className="auth-error" role="alert">{error}</p> : null}
+        </>
+      ) : null}
+      <div className="ft">
+        {sent
+          ? <button className="btn" type="button" disabled={code.length !== 6} onClick={() => code === DEMO_EMAIL_CODE ? onVerified(email.trim()) : setError("That code doesn’t match. Check it and try again.")}>Verify</button>
+          : <button className="btn" type="button" disabled={!valid} onClick={() => setSent(true)}>Send code</button>}
+      </div>
+    </>
+  );
+}
+
+export function InviteLandingScreen({
+  inviter,
+  invitee,
+  circle,
+  preview,
+  onAccept,
+  onBack,
+}: {
+  inviter: string;
+  invitee: string;
+  circle: DemoCircle;
+  preview: boolean;
+  onAccept: () => void;
+  onBack: () => void;
+}) {
+  const [declined, setDeclined] = useState(false);
+  const inviterFirst = inviter.split(" ")[0];
+  if (declined) {
+    return (
+      <>
+        <div className="hd"><span className="tag">Invitation</span></div>
+        <div className="p1-shield"><Icon name="check" size={28} /></div>
+        <h1 className="p2-center">Invitation <i>declined.</i></h1>
+        <p className="c">Nothing was created for you, and {inviterFirst}’s pending record of your details is removed. You won’t be invited again from this card.</p>
+        <div className="ft"><button className="btn" type="button" onClick={onBack}>Close</button></div>
+      </>
+    );
+  }
+  return (
+    <>
+      <div className="hd">
+        <button className="bkb" type="button" onClick={onBack} aria-label="Back"><Icon name="back" /></button>
+        <span className="tag">{preview ? "Preview: what they’ll see" : "Your invitation"}</span>
+      </div>
+      <span className="p1-eyebrow">Hi {invitee.split(" ")[0]}</span>
+      <h1>{inviterFirst} invited you<br /><i>to {circle.name}.</i></h1>
+      <p>You met and swapped cards. {inviterFirst} would like you to join this circle on Harmoni.</p>
+      <div className="card p1-invite-card">
+        <span className="tag">THE PURPOSE</span>
+        <p>{circle.purpose}</p>
+        <div className="p1-invite-topics">{circle.topics.map((topic) => <span key={topic}>{topic}</span>)}</div>
+      </div>
+      <div className="card p2-terms">
+        <div><small>Host</small><b>{circle.host}</b></div>
+        <div><small>Joining</small><b>{admissionLabel(circle.admission)}</b></div>
+        <div><small>Fee</small><b>{feeLabel(circle.fee)}</b></div>
+        <div><small>Type</small><b>{circle.kind === "hub" ? "Hub Circle" : "General Circle"}</b></div>
+      </div>
+      <div className="card p1-preview-access"><Icon name="lock" size={19} /><div><b>You don’t have a profile yet</b><p>{inviterFirst} saved only your name and contact details from your card. It stays private and pending, and nobody else sees it, until you accept.</p></div></div>
+      {preview
+        ? <p className="p2-fine p2-bottom-space">This is a preview of the invitation page. Buttons are inactive here.</p>
+        : <button className="lk p2-bottom-space" type="button" onClick={() => setDeclined(true)}>No thanks, decline</button>}
+      <div className="ft"><button className="btn" type="button" disabled={preview} onClick={onAccept}>Accept and get started</button></div>
+    </>
   );
 }

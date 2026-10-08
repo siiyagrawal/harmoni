@@ -33,6 +33,9 @@ import {
 } from "./screens";
 import {
   GuestCirclePreviewScreen,
+  GuestValueScreen,
+  InviteLandingScreen,
+  VerifyEmailScreen,
   JoinCodeScreen,
   PersonaHubScreen,
   PersonaOnboardingScreen,
@@ -175,6 +178,12 @@ function optimizeImage(file: File, maxDimension: number, format: "image/jpeg" | 
 
 type SessionEnd = { screen: View; toast?: string; authError?: string };
 
+// Sample email-invitation tokens for the recipient landing page (?invite=…).
+const SAMPLE_INVITES: Record<string, { inviter: string; invitee: string; circleId: string }> = {
+  "SB-INV-JORDAN": { inviter: "Asha Rao", invitee: "Jordan Lee", circleId: "sunday-builders" },
+  "VG-INV-ROHAN": { inviter: "Ravi Patil", invitee: "Rohan Malhotra", circleId: "valley-growers" },
+};
+
 export default function HarmoniApp() {
   // Ending a session remounts the app so no sample or in-memory state carries over to the next person.
   const [epoch, setEpoch] = useState(0);
@@ -281,6 +290,9 @@ function HarmoniAppContent({ initial, onSessionEnded }: { initial: SessionEnd | 
   const [messagesReturn, setMessagesReturn] = useState<View>("home");
   const [messagesReturnTab, setMessagesReturnTab] = useState<Tab>("notifications");
   const [pendingAlertId, setPendingAlertId] = useState<string | null>(null);
+  const [joinChoice, setJoinChoice] = useState<"join" | "save">("join");
+  const [verifyNext, setVerifyNext] = useState<View>("details");
+  const [inviteLanding, setInviteLanding] = useState<{ inviter: string; invitee: string; circleId: string; preview: boolean; returnTo: View } | null>(null);
   const impactDemo = useImpactDemo();
   const adminDemo = useAdminDemo();
   const [feedbackId, setFeedbackId] = useState<string | null>(null);
@@ -423,6 +435,14 @@ function HarmoniAppContent({ initial, onSessionEnded }: { initial: SessionEnd | 
     const slug = params.get("shareback");
     if (slug) setPendingShareBackSlug(slug);
     // QR codes, NFC tags, shared links and join codes all resolve to the same circle entry.
+    const inviteToken = params.get("invite");
+    if (inviteToken) {
+      const sample = SAMPLE_INVITES[inviteToken.toUpperCase()];
+      if (sample) {
+        setInviteLanding({ ...sample, preview: false, returnTo: "welcome" });
+        setScreen("invite-landing");
+      }
+    }
     const alertId = params.get("alert");
     if (alertId) {
       setPendingAlertId(alertId);
@@ -738,15 +758,22 @@ function HarmoniAppContent({ initial, onSessionEnded }: { initial: SessionEnd | 
 
   function continueAfterPersona() {
     if (!demoSession) {
-      setPersonaGatePending(true);
-      setAuthMode("signup");
-      setAuthError("");
-      setAuthPassword("");
-      setAuthResetCode("");
-      navigate("auth");
+      navigate("guest-value");
       return;
     }
+    finishPersonaForUser();
+  }
 
+  function goToVerify() {
+    setPersonaGatePending(true);
+    setAuthMode("signup");
+    setAuthError("");
+    setAuthPassword("");
+    setAuthResetCode("");
+    navigate("auth");
+  }
+
+  function finishPersonaForUser() {
     setPersonaGatePending(false);
     setEditingPersonaId(null);
     if (demoCard) {
@@ -856,9 +883,12 @@ function HarmoniAppContent({ initial, onSessionEnded }: { initial: SessionEnd | 
       setAuthPassword("");
       setActiveTab("you");
       setPersonaGatePending(false);
-      if (result.hasCard) {
-        if (joinIntentId) setActiveTab("circles");
-        navigate("home", joinIntentId ? "circles" : "you");
+      if (authMode === "signup") {
+        setProfile(INITIAL_PROFILE);
+        setVerifyNext(result.hasCard ? "home" : "details");
+        navigate("verify-email");
+      } else if (result.hasCard) {
+        landAfterSave();
       } else {
         setProfile(INITIAL_PROFILE);
         navigate("details");
@@ -948,6 +978,17 @@ function HarmoniAppContent({ initial, onSessionEnded }: { initial: SessionEnd | 
       setSavingCard(false);
     }
     setCircleName(name);
+    landAfterSave();
+  }
+
+  // Saving never joins. A guest who chose "Save and join" goes to that circle's join review next.
+  function landAfterSave() {
+    if (joinIntentId && joinChoice === "join") {
+      setActiveTab("circles");
+      setJoinCircleId(joinIntentId);
+      navigate("circle-join");
+      return;
+    }
     const landingTab: Tab = joinIntentId ? "circles" : "you";
     setActiveTab(landingTab);
     navigate("home", landingTab);
@@ -1497,7 +1538,9 @@ function HarmoniAppContent({ initial, onSessionEnded }: { initial: SessionEnd | 
                 setAuthPassword("");
                 setAuthResetCode("");
               }}
-              onBack={() => navigate(personaGatePending ? "persona-review" : "welcome")}
+              onBack={() => navigate(personaGatePending ? "guest-value" : "welcome")}
+              adultConfirmed={adultConfirmed}
+              onAdultConfirmed={setAdultConfirmed}
             />
           </>
         ) : null}
@@ -1546,7 +1589,47 @@ function HarmoniAppContent({ initial, onSessionEnded }: { initial: SessionEnd | 
           />
         ) : null}
         {screen === "persona-started" ? (
-          <PersonaStartScreen draft={personaDraft} guest={!demoSession} onContinue={continueAfterPersona} />
+          <PersonaStartScreen draft={personaDraft} guest={!demoSession} onContinue={continueAfterPersona} onBackToReview={() => navigate("persona-review")} />
+        ) : null}
+        {screen === "guest-value" ? (
+          <GuestValueScreen
+            draft={personaDraft}
+            circle={joinIntent}
+            choice={joinChoice}
+            onChoice={setJoinChoice}
+            onBack={() => navigate("persona-review")}
+            onVerify={goToVerify}
+          />
+        ) : null}
+        {screen === "verify-email" ? (
+          <VerifyEmailScreen
+            initialEmail={authUsername.includes("@") ? authUsername : ""}
+            onVerified={(email) => {
+              setProfile((current) => ({ ...current, email }));
+              setToast("Email verified.");
+              if (verifyNext === "home") landAfterSave();
+              else navigate(verifyNext);
+            }}
+          />
+        ) : null}
+        {screen === "invite-landing" && inviteLanding && findCircle(inviteLanding.circleId) ? (
+          <InviteLandingScreen
+            inviter={inviteLanding.inviter}
+            invitee={inviteLanding.invitee}
+            circle={findCircle(inviteLanding.circleId)!}
+            preview={inviteLanding.preview}
+            onBack={() => {
+              if (!inviteLanding.preview) router.replace("/");
+              navigate(inviteLanding.returnTo);
+            }}
+            onAccept={() => {
+              router.replace("/");
+              setEntryCircleId(inviteLanding.circleId);
+              setJoinIntentId(inviteLanding.circleId);
+              setJoinChoice("join");
+              startPersonaFlow("invite-landing");
+            }}
+          />
         ) : null}
         {screen === "dossier" ? (
           <DossierScreen
@@ -1632,6 +1715,10 @@ function HarmoniAppContent({ initial, onSessionEnded }: { initial: SessionEnd | 
             onSave={(capture, replaceId) => { circleDemo.saveCapture(capture, replaceId); }}
             onBack={() => navigate("home", "scan")}
             onDone={() => navigate("home", "scan")}
+            onPreviewInvite={(invitee, circleId) => {
+              setInviteLanding({ inviter: profile.name || "You", invitee, circleId: circleId ?? "sunday-builders", preview: true, returnTo: "card-capture" });
+              navigate("invite-landing");
+            }}
           />
         ) : null}
         {screen === "express-interest" && interestMatch ? (
@@ -1750,7 +1837,7 @@ function HarmoniAppContent({ initial, onSessionEnded }: { initial: SessionEnd | 
             demo={notificationsDemo}
             circles={circleDemo.circles.filter((circle) => circle.status === "active" || circle.role === "host")}
             email={profile.email}
-            alertHref="/?alert=n-neha"
+            alertHref="/?alert=n-admission"
             onBack={() => { setActiveTab("notifications"); navigate("home", "notifications"); }}
           />
         ) : null}
@@ -1917,6 +2004,11 @@ function HarmoniAppContent({ initial, onSessionEnded }: { initial: SessionEnd | 
                   onShare={() => openShareEntry()}
                   onOpenContacts={openContacts}
                 />
+                <button className="card p5-entry p6-create-entry" type="button" onClick={() => navigate("circle-create")}>
+                  <span className="p2-circle-mark"><Icon name="circle" size={20} /></span>
+                  <span className="p2-circle-copy"><b>Create a circle</b><small>Set its purpose, who can find it and how people join</small></span>
+                  <Icon name="chevron" size={17} />
+                </button>
                 <ImpactEntryCard
                   people={impactDemo.confirmedPeople}
                   awaiting={impactDemo.feedback.filter((item) => item.status === "awaiting").length}

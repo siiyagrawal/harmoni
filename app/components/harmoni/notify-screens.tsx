@@ -66,8 +66,8 @@ export function NotificationsScreen({
         <div className="card p4-consent">
           <span className="p1-spark"><Icon name="bell" size={17} /></span>
           <div>
-            <b>Know when someone wants to connect</b>
-            <p>You’ll always see updates here. Choose how else to hear about them.</p>
+            <b>Get alerts when you’re away</b>
+            <p>Connection requests always appear here in Harmoni. Choose how to hear about messages, approvals and other updates.</p>
             <div className="p2-inline-row">
               <button className="pill" type="button" onClick={() => answerConsent("email")}>Email</button>
               <button className="pill" type="button" onClick={() => answerConsent("push")}>Phone alerts</button>
@@ -169,7 +169,11 @@ export function NotificationSettingsScreen({
 
       <h2 className="p1-section-title">What to send</h2>
       <div className="card p4-cadence-card">
-        {(Object.keys(CATEGORY_LABELS) as NotificationCategory[]).map((category) => (
+        <div className="p2-select-row p6-fixed-row">
+          <span>{CATEGORY_LABELS.interest}</span>
+          <b>In Harmoni only</b>
+        </div>
+        {(Object.keys(CATEGORY_LABELS) as NotificationCategory[]).filter((category) => category !== "interest").map((category) => (
           <label className="p2-select-row" key={category}>
             <span>{CATEGORY_LABELS[category]}</span>
             <select value={prefs.categories[category]} onChange={(event) => setPrefs((current) => ({ ...current, categories: { ...current.categories, [category]: event.target.value as Cadence } }))}>
@@ -178,7 +182,7 @@ export function NotificationSettingsScreen({
           </label>
         ))}
       </div>
-      <p className="p2-fine">Several requests close together are grouped into one alert. Turning a type off still keeps it here in Harmoni.</p>
+      <p className="p2-fine">Connection requests are shown live in Harmoni, not by email. Offline alerts for them need separate confirmation. Several updates close together are grouped, and turning a type off still keeps it here in Harmoni.</p>
 
       <h2 className="p1-section-title">Quiet hours</h2>
       <div className="card p4-cadence-card">
@@ -211,11 +215,11 @@ export function NotificationSettingsScreen({
       <h2 className="p1-section-title">What an alert looks like</h2>
       <div className="card p2-email-preview">
         <small>From: Harmoni · To: {email || "you"}</small>
-        <b>Someone would like to connect</b>
-        <pre>{"Open Harmoni to see who and decide.\n\nWe don’t include names of circles, personas or message text in alerts."}</pre>
+        <b>Your join request was approved</b>
+        <pre>{"Open Harmoni to see what’s next.\n\nWe don’t include names of circles, personas or message text in alerts."}</pre>
         <a className="pill p4-preview-link" href={alertHref}>Open from this alert</a>
       </div>
-      <p className="p2-fine">Opening an alert asks you to sign in only if needed, then takes you straight to that request. If it’s already been handled, you’ll see its current status instead.</p>
+      <p className="p2-fine">Opening an alert asks you to sign in only if needed, then takes you straight to what it’s about. If it’s already been handled, you’ll see its current status instead.</p>
 
       <h2 className="p1-section-title">Recent delivery</h2>
       <div className="lst p4-list">

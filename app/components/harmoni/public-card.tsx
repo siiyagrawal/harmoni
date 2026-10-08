@@ -25,6 +25,7 @@ export default function PublicCard({ slug }: { slug: string }) {
   const [origin, setOrigin] = useState("");
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>("signup");
+  const [adultConfirmed, setAdultConfirmed] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -182,8 +183,14 @@ export default function PublicCard({ slug }: { slug: string }) {
               <span>Password</span>
               <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete={authMode === "signup" ? "new-password" : "current-password"} minLength={8} maxLength={256} required />
             </label>
+            {authMode === "signup" ? (
+              <label className="p1-adult-check auth-adult-check">
+                <input type="checkbox" checked={adultConfirmed} onChange={(event) => setAdultConfirmed(event.target.checked)} />
+                <span>I confirm I&apos;m 18 or older. Harmoni&apos;s pilot is for adults only.</span>
+              </label>
+            ) : null}
             {error ? <p className="auth-error" role="alert">{error}</p> : null}
-            <div className="auth-actions"><button className="btn pu" type="submit" disabled={busy}>{busy ? "Please wait…" : authMode === "signup" ? "Create account" : "Sign in"}</button></div>
+            <div className="auth-actions"><button className="btn pu" type="submit" disabled={busy || (authMode === "signup" && !adultConfirmed)}>{busy ? "Please wait…" : authMode === "signup" ? "Create account" : "Sign in"}</button></div>
           </form>
           <p className="auth-switch">
             {authMode === "signup" ? "Already have an account?" : "New to Harmoni?"}{" "}

@@ -82,6 +82,10 @@ export function MatchesHubScreen({
   const eligible = demo.matches.filter((match) => activeIds.has(match.circleId) && (matchScope.circleId === "all" || match.circleId === matchScope.circleId));
   const visible = eligible.filter((match) => !match.dismissed).sort((a, b) => FIT_ORDER[a.fit] - FIT_ORDER[b.fit]);
   const hidden = eligible.length - visible.length;
+  // One person at a time: the top eligible match you haven't already contacted or connected with.
+  const inProgress = visible.filter((match) => demo.connectionWith(match.personId) || demo.openRequestWith(match.personId, match.circleId)?.direction === "sent");
+  const queue = visible.filter((match) => !inProgress.includes(match));
+  const top = queue[0];
   const incomingCount = demo.requests.filter((request) => (request.direction === "incoming" && request.status === "pending") || (request.direction === "review" && request.status === "host-review")).length;
 
   useEffect(() => {
@@ -136,23 +140,29 @@ export function MatchesHubScreen({
             <div className="card p1-empty-state"><h2>No matches for {persona.name} yet</h2><p>This persona is kept separate, so it’s only matched inside circles set up for it. None of your circles are, yet.</p></div>
           ) : (
             <>
-              {visible.map((match, index) => (
+              {top ? (
                 <MatchCard
-                  key={match.id}
-                  rank={index + 1}
-                  match={match}
-                  circleName={circleName(match.circleId)}
-                  request={demo.openRequestWith(match.personId, match.circleId)}
-                  connection={demo.connectionWith(match.personId)}
+                  key={top.id}
+                  position={1}
+                  total={queue.length}
+                  match={top}
+                  circleName={circleName(top.circleId)}
+                  request={demo.openRequestWith(top.personId, top.circleId)}
+                  connection={demo.connectionWith(top.personId)}
                   onMessage={onMessage}
-                  onInterest={() => onInterest(match)}
+                  onInterest={() => onInterest(top)}
                   onReview={onReview}
-                  onDismiss={() => demo.dismissMatch(match.id)}
+                  onDismiss={() => { demo.dismissMatch(top.id); onToast(queue.length > 1 ? "Skipped. Here’s the next person." : "Skipped."); }}
                   onOpenRequests={() => setSegment("requests")}
                 />
-              ))}
-              {!visible.length ? <div className="card p1-empty-state"><h2>No matches right now</h2><p>Add more about what would help or what you can share, then refresh.</p><button className="btn g s" type="button" onClick={onBuildPersona}>Tell My AI More</button></div> : null}
-              {hidden ? <button className="lk p2-inline-link" type="button" onClick={demo.restoreMatches}>Show {hidden} hidden {hidden === 1 ? "match" : "matches"}</button> : null}
+              ) : (
+                <div className="card p1-empty-state"><h2>{eligible.length ? "You’ve seen everyone for now" : "No matches right now"}</h2><p>Add more about what would help or what you can share, then refresh.</p><button className="btn g s" type="button" onClick={onBuildPersona}>Tell My AI More</button></div>
+              )}
+              <div className="p6-queue-meta">
+                {queue.length > 1 ? <span className="tag">{queue.length - 1} more {queue.length - 1 === 1 ? "person" : "people"} after this one</span> : null}
+                {inProgress.length ? <button className="lk p2-inline-link" type="button" onClick={() => setSegment("requests")}>{inProgress.length} already in Requests</button> : null}
+                {hidden ? <button className="lk p2-inline-link" type="button" onClick={demo.restoreMatches}>Show {hidden} skipped</button> : null}
+              </div>
             </>
           )}
 
@@ -179,7 +189,8 @@ export function MatchesHubScreen({
 }
 
 function MatchCard({
-  rank,
+  position,
+  total,
   match,
   circleName,
   request,
@@ -190,7 +201,8 @@ function MatchCard({
   onDismiss,
   onOpenRequests,
 }: {
-  rank: number;
+  position: number;
+  total: number;
   match: DemoMatch;
   circleName: string;
   request?: ConnRequest;
@@ -201,24 +213,29 @@ function MatchCard({
   onDismiss: () => void;
   onOpenRequests: () => void;
 }) {
-  const [open, setOpen] = useState(rank === 1);
+  const [open, setOpen] = useState(false);
   let action: ReactNode;
   if (connection) action = connection.grants?.chat
     ? <div className="p3-state ok"><span><Icon name="check" size={16} /> Connected</span><button className="pill on" type="button" onClick={() => onMessage(connection)}>Message</button></div>
     : <div className="p3-state ok"><Icon name="check" size={16} />Connected. Messaging isn’t part of this connection.</div>;
-  else if (request?.direction === "incoming") action = <div className="p3-state info"><span>{match.name.split(" ")[0]} asked to connect with you.</span><button className="pill on" type="button" onClick={() => onReview(request)}>Review</button></div>;
+  else if (request?.direction === "incoming") action = (
+    <>
+      <div className="p3-state info"><span>{match.name.split(" ")[0]} asked to connect with you.</span><button className="pill on" type="button" onClick={() => onReview(request)}>Review</button></div>
+      <div className="p2-inline-row"><button className="btn g s" type="button" onClick={onDismiss}>Not now</button></div>
+    </>
+  );
   else if (request) action = <div className="p3-state wait"><span>{request.status === "host-review" ? "Your request is with the host" : "Your request is pending"}</span><button className="pill" type="button" onClick={onOpenRequests}>View</button></div>;
   else action = (
     <div className="p2-inline-row">
-      <button className="btn s" type="button" onClick={onInterest}>I’m interested</button>
-      <button className="pill" type="button" onClick={onDismiss}>Not now</button>
+      <button className="btn s" type="button" onClick={onInterest}>Interested</button>
+      <button className="btn g s" type="button" onClick={onDismiss}>Not now</button>
     </div>
   );
 
   return (
     <div className="card p3-match">
+      <span className="p6-top-label">{position === 1 ? "Your top match" : `Match ${position}`} · {position} of {total}</span>
       <div className="p2-listing-head">
-        <span className="p3-rank">{rank}</span>
         <Avatar name={match.name} size={44} />
         <span className="p2-circle-copy"><b>{match.name}</b><small>{match.headline} · {circleName}</small></span>
         <span className={`p3-fit ${match.fit.toLowerCase()}`}>{match.fit} fit</span>

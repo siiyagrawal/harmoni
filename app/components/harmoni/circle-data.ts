@@ -121,6 +121,9 @@ export type CircleDraft = {
 export const CIRCLE_CATEGORIES = ["Startups", "Agriculture", "Legal", "Health", "Makers", "Family", "Finance", "Community"];
 export const CIRCLE_AREAS = ["Anywhere", "Online", "Bengaluru", "Pune", "Nashik", "Mumbai"];
 export const HUB_APPLICATION_EMAIL = "hubs@harmoni.example";
+export const INVITE_EXPIRY_OPTIONS = ["1 day", "7 days", "30 days", "No expiry"] as const;
+export type InviteExpiry = (typeof INVITE_EXPIRY_OPTIONS)[number];
+const expiryLabel = (expiry: InviteExpiry) => expiry === "No expiry" ? "No expiry" : `Expires in ${expiry}`;
 
 const DEFAULT_SETTINGS: HostSettings = {
   whoCanInvite: "host",
@@ -545,18 +548,18 @@ export function useCircleDemo() {
     }));
   }
 
-  function addEmailInvitation(circleId: string, email: string) {
+  function addEmailInvitation(circleId: string, email: string, expiry: InviteExpiry = "7 days") {
     patchCircle(circleId, (circle) => circle.invitations.some((invitation) => invitation.kind === "email" && invitation.target === email && invitation.status === "active")
       ? circle
-      : { ...circle, invitations: [{ id: nextId("inv"), kind: "email", target: email, status: "active", expires: "Expires in 7 days" }, ...circle.invitations] });
+      : { ...circle, invitations: [{ id: nextId("inv"), kind: "email", target: email, status: "active", expires: expiryLabel(expiry) }, ...circle.invitations] });
   }
 
-  function regenerateLink(circleId: string) {
+  function regenerateLink(circleId: string, expiry: InviteExpiry = "30 days") {
     patchCircle(circleId, (circle) => ({
       ...circle,
       joinCode: `${circle.joinCode.split("-")[0]}-${Math.floor(1000 + Math.random() * 9000)}`,
       invitations: [
-        { id: nextId("inv"), kind: "link", target: "Reusable join link", status: "active", expires: "Expires in 30 days", uses: 0 },
+        { id: nextId("inv"), kind: "link", target: "Reusable join link", status: "active", expires: expiryLabel(expiry), uses: 0 },
         ...circle.invitations.map((invitation) => invitation.kind === "link" && invitation.status === "active"
           ? { ...invitation, status: "revoked" as const, expires: "Replaced just now" }
           : invitation),

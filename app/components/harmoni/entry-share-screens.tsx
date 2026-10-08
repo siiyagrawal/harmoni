@@ -207,7 +207,9 @@ export function CardCaptureScreen({
   onSave,
   onBack,
   onDone,
+  onPreviewInvite,
 }: {
+  onPreviewInvite: (invitee: string, circleId: string | null) => void;
   senderName: string;
   destinations: EntryDestination[];
   findDuplicate: (name: string, email: string) => CapturedCard | undefined;
@@ -343,6 +345,7 @@ export function CardCaptureScreen({
           <h1 className="p2-center">Invitation <i>queued.</i></h1>
           <p className="c">We’ll show delivery status under Scan → Business card. Retrying uses the same record, so {fields.name.split(" ")[0]} won’t get duplicates.</p>
           <p className="p2-fine c">Demo only: no email is sent.</p>
+          <button className="lk" type="button" onClick={() => onPreviewInvite(fields.name, circleId === "none" || circleId === "personal" ? null : circleId)}>Preview what {fields.name.split(" ")[0]} will see</button>
           <button className="lk p2-bottom-space" type="button" onClick={restart}>Capture another card</button>
           <div className="ft"><button className="btn" type="button" onClick={onDone}>Done</button></div>
         </>

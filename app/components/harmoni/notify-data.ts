@@ -73,10 +73,10 @@ const SAMPLE_NOTIFICATIONS: DemoNotification[] = [
 ];
 
 const SAMPLE_DELIVERIES: DeliveryRecord[] = [
-  { id: "d1", channel: "Email", title: "Someone would like to connect", status: "accepted", note: "Accepted by the email provider. That doesn’t confirm you saw it.", at: "1h" },
-  { id: "d2", channel: "Email", title: "Connection requests", status: "grouped", note: "Grouped with an earlier request in the same 30-minute window.", at: "40m" },
+  { id: "d1", channel: "Email", title: "Your join request was approved", status: "accepted", note: "Accepted by the email provider. That doesn’t confirm you saw it.", at: "3 days" },
+  { id: "d2", channel: "In-app", title: "Connection requests", status: "grouped", note: "Two requests grouped into one update. Connection requests stay in Harmoni; no email is sent for them.", at: "40m" },
   { id: "d3", channel: "Push", title: "You have a new message", status: "failed", note: "This browser’s push subscription had expired, so it was removed. Email was used instead.", at: "25m" },
-  { id: "d4", channel: "Email", title: "Someone would like to connect", status: "suppressed", note: "Not sent: the request was withdrawn before delivery.", at: "2 days" },
+  { id: "d4", channel: "Email", title: "Spotlight reminder", status: "suppressed", note: "Not sent: the Spotlight was cancelled before delivery.", at: "2 days" },
   { id: "d5", channel: "Email", title: "Daily digest", status: "held", note: "Held during your quiet hours and sent at 7:00.", at: "Yesterday" },
 ];
 

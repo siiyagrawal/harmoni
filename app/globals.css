@@ -360,4 +360,14 @@ table.card.p5-table{display:table;padding:0 14px}
 .p6-delete{margin-top:24px}.p6-delete .btn{margin-top:12px}
 .p6-inline-pill{margin:10px 0 0}
 .p2-check-list div>span[aria-hidden]{color:var(--ok);font-weight:700;flex:none}
+/* Review fixes: one match at a time, guest value preview, verification, invite expiry */
+.p6-top-label{display:block;margin:0 0 10px;font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#8A6720}
+.p6-queue-meta{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:4px 12px;margin:-2px 2px 8px}.p6-queue-meta .p2-inline-link{padding:6px 0}
+.p3-match .p2-inline-row .btn{margin:0}
+.p6-value{padding:16px}.p6-value>b{display:block;font-size:22px;letter-spacing:-.02em}.p6-value>p{font-size:14px;margin:2px 0 10px}
+.p6-locked{display:flex;gap:8px;margin:14px 0 4px}.p6-locked i{width:44px;height:44px;border-radius:50%;background:linear-gradient(140deg,rgba(243,223,162,.9),rgba(201,162,76,.6));filter:blur(3px);opacity:.8}
+.auth-adult-check{margin:4px 2px 16px}
+.p6-link-expiry{margin-top:12px}
+.p6-create-entry+.p5-entry{margin-top:0}
+.p6-fixed-row{justify-content:space-between;padding:12px 14px;background:rgba(255,253,248,.7)!important;margin-bottom:8px}.p6-fixed-row span{color:var(--ink)!important}.p6-fixed-row b{font-size:14px;color:var(--mu)}
 .p3-suggestion{padding:14px 16px;border-style:dashed;border-color:rgba(201,162,76,.6)}.p3-suggestion p{margin:6px 0 10px;font-size:14px;color:var(--ink)}.p3-suggestion .pill{font-size:12px}
