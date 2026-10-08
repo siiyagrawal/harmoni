@@ -27,7 +27,7 @@ export default function DigitalCard({
       color: field.color,
     })),
   ];
-  const canFlip = flipOnClick && profile.qrOnBack;
+  const canFlip = flipOnClick && profile.qrOnBack && Boolean(profile.publicUrl);
 
   function tilt(event: PointerEvent<HTMLDivElement>) {
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -97,12 +97,6 @@ export default function DigitalCard({
               </div>
             ) : null}
             {profile.headline ? <p className="card-headline">{profile.headline}</p> : null}
-            {profile.wants.length ? (
-              <div className="hw"><small>Looking for</small>{profile.wants.map((item) => <b key={item}>{item}</b>)}</div>
-            ) : null}
-            {profile.haves.length ? (
-              <div className="hw"><small>Can help with</small>{profile.haves.map((item) => <b key={item}>{item}</b>)}</div>
-            ) : null}
             {fields.length ? (
               <div className="frs">
                 {fields.map((field) => (
@@ -124,12 +118,12 @@ export default function DigitalCard({
             ) : null}
           </div>
         </div>
-        {profile.qrOnBack ? (
+        {profile.qrOnBack && profile.publicUrl ? (
           <div className="pk">
             <CardArtwork variant={profile.art} />
             <div className="qp">
               <div className="qrw">
-                <QrCode seed={`${name}${profile.circle}`} />
+                <QrCode value={profile.publicUrl} />
               </div>
               <div className="pn card-back-name">{name}</div>
               <div className="tag">Scan to join {profile.circle || "my circle"}</div>

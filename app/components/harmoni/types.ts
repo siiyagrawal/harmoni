@@ -9,6 +9,7 @@ export type View =
   | "preview"
   | "circle-setup"
   | "design"
+  | "access-log"
   | "home";
 
 export type Tab = "card" | "contacts" | "scan" | "circle";
@@ -18,6 +19,7 @@ export type Profile = {
   title: string;
   company: string;
   headline: string;
+  publicUrl: string;
   email: string;
   phone: string;
   photo: string;
@@ -29,8 +31,6 @@ export type Profile = {
   squarePhoto: boolean;
   art: number;
   circle: string;
-  wants: string[];
-  haves: string[];
   fields: ProfileField[];
   qrOnBack: boolean;
   includeMeetingPlace: boolean;
@@ -47,7 +47,10 @@ export type ProfileField = {
 export type ContactNote = { text: string; at: string };
 
 export type Contact = {
+  id: Id<"contacts">;
+  linkedUserId?: Id<"users">;
   name: string;
+  publicUrl: string;
   title: string;
   company: string;
   email: string;
@@ -55,6 +58,8 @@ export type Contact = {
   photo: string;
   when: string;
   source: string;
+  canRequestIntros: boolean;
+  introducedByName?: string;
   tags: string[];
   notes: ContactNote[];
   met: string;
@@ -66,6 +71,7 @@ export const INITIAL_PROFILE: Profile = {
   title: "",
   company: "",
   headline: "",
+  publicUrl: "",
   email: "",
   phone: "",
   photo: "",
@@ -77,8 +83,6 @@ export const INITIAL_PROFILE: Profile = {
   squarePhoto: false,
   art: 0,
   circle: "",
-  wants: [],
-  haves: [],
   fields: [],
   qrOnBack: true,
   includeMeetingPlace: true,

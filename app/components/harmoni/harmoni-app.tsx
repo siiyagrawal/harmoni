@@ -1,19 +1,23 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
+import { useRouter } from "next/navigation";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { AppHeader, BottomNav, MenuSheet, type MenuAction } from "./navigation";
 import {
+  AccessLogScreen,
   CircleScreen,
+  CircleNameSheet,
   CircleSetupScreen,
   ContactCardScreen,
   ContactDetailScreen,
   ContactEntrySheet,
   ContactsScreen,
   DeleteAccountSheet,
+  DeleteCardSheet,
   DemoAuthScreen,
   DesignScreen,
   DetailsScreen,
@@ -22,36 +26,35 @@ import {
   PhotoScreen,
   PreviewScreen,
   ScanScreen,
+  ScreenErrorBoundary,
   SetupGuide,
+  ShareLinkSheet,
   WelcomeScreen,
 } from "./screens";
 import { INITIAL_PROFILE, type Contact, type Profile, type Tab, type View } from "./types";
 
-const STORAGE_KEY = "harmoni_demo_v1";
 const SESSION_KEY = "harmoni_demo_session";
-const USER_ID_KEY = "harmoni_demo_user_id";
-
-type PersistedState = {
-  screen: View;
-  returnTo: View;
-  profile: Profile;
-  contacts: Contact[];
-  xp: number;
-  activeTab: Tab;
-  shared: boolean;
-  introductions: Record<string, boolean>;
-};
 
 function toDemoCardPayload(profile: Profile, sessionToken: string, status?: "draft" | "published") {
-  const visibleFields = profile.fields.map((field, order) => ({
+  const fields = profile.fields
+    .filter((field) => field.value.trim())
+    .map((field, order) => ({
     label: field.label,
     value: field.value,
-    kind: field.id,
+    kind: field.id === "website" ? "web" : field.id,
     abbreviation: field.abbreviation,
     color: field.color,
     visible: true,
     order,
   }));
+  for (const item of [
+    { label: "Email", value: profile.email, kind: "email", abbreviation: "em", color: "#0a84ff" },
+    { label: "Phone", value: profile.phone, kind: "phone", abbreviation: "ph", color: "#34c759" },
+  ]) {
+    if (item.value.trim() && !fields.some((field) => field.kind === item.kind)) {
+      fields.push({ ...item, visible: true, order: fields.length });
+    }
+  }
 
   return {
     sessionToken,
@@ -59,29 +62,14 @@ function toDemoCardPayload(profile: Profile, sessionToken: string, status?: "dra
     jobTitle: profile.title,
     company: profile.company,
     headline: profile.headline,
-    email: profile.email,
-    phone: profile.phone,
-    website: profile.fields.find((field) => field.id === "website")?.value ?? "",
     photoStorageId: profile.photoStorageId,
     coverStorageId: profile.coverStorageId,
     logoStorageId: profile.logoStorageId,
     logoMode: profile.logo === "auto" ? "auto" as const : profile.logoStorageId ? "image" as const : null,
     squarePhoto: profile.squarePhoto,
-    circle: profile.circle,
-    wants: profile.wants,
-    haves: profile.haves,
     qrOnBack: profile.qrOnBack,
     includeMeetingPlace: profile.includeMeetingPlace,
-    links: profile.fields
-      .filter((field) => field.value.trim())
-      .map((field, order) => ({
-        label: field.label,
-        url: field.value,
-        kind: field.id,
-        visible: true,
-        order,
-      })),
-    fields: visibleFields,
+    fields,
     theme: {
       style: String(profile.art),
       accentColor: "#1d5647",
@@ -118,62 +106,155 @@ function optimizeImage(file: File, maxDimension: number, format: "image/jpeg" | 
   });
 }
 
-function profileForLocalCache(profile: Profile): Profile {
-  return {
-    ...profile,
-    photo: profile.photoStorageId ? "" : profile.photo,
-    cover: profile.coverStorageId ? "" : profile.cover,
-    logo: profile.logoStorageId && profile.logo !== "auto" ? "" : profile.logo,
-  };
+export default function HarmoniApp() {
+  return (
+    <ScreenErrorBoundary section="Harmoni">
+      <HarmoniAppContent />
+    </ScreenErrorBoundary>
+  );
 }
 
-export default function HarmoniApp() {
-  const [screen, setScreen] = useState<View>("welcome");
+function HarmoniAppContent() {
+  const router = useRouter();
+  const [screen, setScreen] = useState<View>("auth");
   const [returnTo, setReturnTo] = useState<View>("home");
   const [profile, setProfile] = useState<Profile>(INITIAL_PROFILE);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [xp, setXp] = useState(0);
   const [activeTab, setActiveTab] = useState<Tab>("card");
   const [circleName, setCircleName] = useState("");
   const [query, setQuery] = useState("");
   const [shared, setShared] = useState(false);
-  const [introductions, setIntroductions] = useState<Record<string, boolean>>({});
-  const [selectedContactName, setSelectedContactName] = useState("");
+  const [pendingShareBackSlug, setPendingShareBackSlug] = useState<string | null>(null);
+  const [matchingSuggestions, setMatchingSuggestions] = useState<{
+    _id: Id<"matchSuggestions">;
+    targetUserId: Id<"users">;
+    targetName: string;
+    reason: string;
+    score: number;
+  }[]>([]);
+  const [selectedContactId, setSelectedContactId] = useState<Id<"contacts"> | null>(null);
   const [contactView, setContactView] = useState<"detail" | "card" | null>(null);
   const [entryValue, setEntryValue] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [demoSession, setDemoSession] = useState<string | null>(null);
   const [demoUserId, setDemoUserId] = useState<Id<"users"> | null>(null);
-  const [authMode, setAuthMode] = useState<"signup" | "signin">("signup");
+  const [demoMe, setDemoMe] = useState<{
+    userId: Id<"users">;
+    username: string;
+    fullName: string;
+    hasCard: boolean;
+  } | null | undefined>(undefined);
+  const [authMode, setAuthMode] = useState<"signup" | "signin" | "forgot" | "reset">("signin");
   const [authUsername, setAuthUsername] = useState("");
   const [authPassword, setAuthPassword] = useState("");
+  const [authResetCode, setAuthResetCode] = useState("");
+  const [authResetCodeValue, setAuthResetCodeValue] = useState("");
   const [authError, setAuthError] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [savingCard, setSavingCard] = useState(false);
-  const [sheet, setSheet] = useState<"menu" | "setup" | "tag" | "note" | "delete-account" | null>(null);
+  const [sheet, setSheet] = useState<"menu" | "setup" | "tag" | "note" | "met" | "circle-name" | "delete-account" | "delete-card" | "share-link" | null>(null);
   const [toast, setToast] = useState("");
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deletingCard, setDeletingCard] = useState(false);
   const restoredDemoUser = useRef<string | null>(null);
-  const registerDemo = useAction(api.demoAuth.register);
-  const signInDemo = useAction(api.demoAuth.signIn);
-  const logoutDemo = useMutation(api.users.logoutDemo);
-  const removeDemoAccount = useMutation(api.users.deleteDemoAccount);
+  const lastSavedProfile = useRef("");
+  const signUpDemo = useAction(api.auth.signUp);
+  const logInDemo = useAction(api.auth.logIn);
+  const requestPasswordReset = useAction(api.auth.requestReset);
+  const resetDemoPassword = useAction(api.auth.resetPassword);
+  const getDemoMe = useAction(api.auth.me);
+  const logoutDemo = useAction(api.auth.logOut);
+  const removeDemoAccount = useAction(api.auth.deleteAccount);
+  const startDemoOver = useAction(api.auth.startOver);
   const saveDemoProfile = useMutation(api.cards.saveDemoProfile);
+  const removeDemoCard = useMutation(api.cards.deleteMine);
   const createDemoImageUploadUrl = useMutation(api.cards.generateDemoImageUploadUrl);
+  const registerDemoImageUpload = useMutation(api.cards.registerDemoImageUpload);
+  const recordCardShare = useMutation(api.cards.recordShare);
+  const updateContact = useMutation(api.contacts.updateDetails);
+  const addContactNote = useMutation(api.contacts.addNote);
+  const sendExchange = useMutation(api.exchanges.send);
+  const acceptExchange = useMutation(api.exchanges.accept);
+  const declineExchange = useMutation(api.exchanges.decline);
+  const requestIntroduction = useMutation(api.intros.request);
+  const decideIntroduction = useMutation(api.intros.decide);
+  const renameMyCircle = useMutation(api.circles.rename);
+  const createPersonaItem = useMutation(api.persona.create);
+  const updatePersonaItem = useMutation(api.persona.update);
+  const approvePersonaItem = useMutation(api.persona.approve);
+  const archivePersonaItem = useMutation(api.persona.archive);
+  const setPersonaVisibility = useMutation(api.persona.setVisibility);
+  const grantPersonaAccess = useMutation(api.persona.grant);
+  const revokePersonaAccess = useMutation(api.persona.revoke);
+  const refreshMatches = useMutation(api.matching.refresh);
+  const dismissMatch = useMutation(api.matching.dismiss);
+  const seedDemoData = useMutation(api.seeds.seedDemoData);
   const demoCard = useQuery(
     api.cards.getPrimaryDemo,
     hydrated && demoSession ? { sessionToken: demoSession } : "skip",
+  );
+  const contactPage = useQuery(
+    api.contacts.listMine,
+    hydrated && demoSession ? { sessionToken: demoSession, paginationOpts: { numItems: 100, cursor: null } } : "skip",
+  );
+  const progress = useQuery(api.progress.mine, hydrated && demoSession ? { sessionToken: demoSession } : "skip");
+  const myCircle = useQuery(api.circles.mine, hydrated && demoSession ? { sessionToken: demoSession } : "skip");
+  const exchangeInbox = useQuery(api.exchanges.inbox, hydrated && demoSession ? { sessionToken: demoSession } : "skip");
+  const introInbox = useQuery(api.intros.inbox, hydrated && demoSession ? { sessionToken: demoSession } : "skip");
+  const sentIntroRequests = useQuery(api.intros.sentMine, hydrated && demoSession ? { sessionToken: demoSession } : "skip");
+  const personaItems = useQuery(api.persona.mine, hydrated && demoSession ? { sessionToken: demoSession } : "skip");
+  const accessLog = useQuery(
+    api.persona.accessLogMine,
+    hydrated && demoSession && screen === "access-log" ? { sessionToken: demoSession } : "skip",
+  );
+  const xp = progress?.xp ?? 0;
+  const awardedBadges = progress?.awardedBadges ?? [];
+  const contacts = useMemo<Contact[]>(() => (contactPage?.page ?? []).map((contact) => {
+    const card = contact.linkedCard;
+    const snapshot = contact.snapshot;
+    const fields = card?.fields ?? snapshot.fields;
+    const introRequested = (sentIntroRequests ?? []).some((request) =>
+      request.status === "pending" && request.introducerId === contact.linkedUserId,
+    );
+    return {
+      id: contact._id,
+      ...(contact.linkedUserId ? { linkedUserId: contact.linkedUserId } : {}),
+      publicUrl: card?.slug ? (typeof window === "undefined" ? `/c/${card.slug}` : `${window.location.origin}/c/${card.slug}`) : "",
+      name: card?.fullName ?? snapshot.fullName,
+      title: card?.jobTitle ?? snapshot.jobTitle ?? "",
+      company: card?.company ?? snapshot.company ?? "",
+      email: fields.find((field) => field.kind === "email")?.value ?? "",
+      phone: fields.find((field) => field.kind === "phone")?.value ?? "",
+      photo: contact.photoUrl ?? "",
+      when: new Date(contact.metAt ?? contact.createdAt).toLocaleDateString(),
+      source: contact.source.replaceAll("_", " "),
+      canRequestIntros: contact.canRequestIntros,
+      ...(contact.introducedByName ? { introducedByName: contact.introducedByName } : {}),
+      tags: contact.tags,
+      notes: contact.notes.map((note) => ({ text: note.body, at: new Date(note.createdAt).toLocaleString() })),
+      met: contact.metLocation ?? "",
+      introRequested,
+    };
+  }), [contactPage, sentIntroRequests]);
+  const selectedContact = contacts.find((contact) => contact.id === selectedContactId);
+  const introNetwork = useQuery(
+    api.circles.network,
+    hydrated && demoSession && selectedContact?.canRequestIntros && selectedContact.linkedUserId
+      ? { sessionToken: demoSession, introducerId: selectedContact.linkedUserId }
+      : "skip",
   );
 
   async function persistDemoProfile(nextProfile: Profile, status: "draft" | "published" = "draft") {
     if (!demoSession) throw new Error("Sign in before saving your card.");
     const saved = await saveDemoProfile(toDemoCardPayload(nextProfile, demoSession, status));
-    return {
+    const savedProfile = {
       ...nextProfile,
+      publicUrl: typeof window === "undefined" ? `/c/${saved.slug}` : `${window.location.origin}/c/${saved.slug}`,
       photo: saved.photoUrl ?? "",
       cover: saved.coverUrl ?? "",
       logo: nextProfile.logo === "auto" ? "auto" : saved.logoUrl ?? "",
     };
+    lastSavedProfile.current = JSON.stringify(savedProfile);
+    return savedProfile;
   }
 
   async function uploadProfileImage(dataUrl: string, sessionToken: string) {
@@ -186,60 +267,58 @@ export default function HarmoniApp() {
     });
     if (!response.ok) throw new Error("The image could not be uploaded. Try again.");
     const upload = await response.json() as { storageId: Id<"_storage"> };
+    await registerDemoImageUpload({ sessionToken, storageId: upload.storageId });
     return upload.storageId;
   }
 
-  // Restore browser-only state after hydration so the server and first client render stay identical.
+  // Restore only the demo session token; all profile and networking data comes from Convex.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     try {
       const session = localStorage.getItem(SESSION_KEY);
-      const userId = localStorage.getItem(USER_ID_KEY) as Id<"users"> | null;
-      if (session && userId) {
-        setDemoSession(session);
-        setDemoUserId(userId);
-        const saved = localStorage.getItem(`${STORAGE_KEY}_${userId}`);
-        if (saved) {
-          const state = JSON.parse(saved) as Partial<PersistedState>;
-          if (state.profile) setProfile({ ...INITIAL_PROFILE, ...state.profile });
-          if (state.contacts) setContacts(state.contacts.map((contact) => ({
-            ...contact,
-            tags: contact.tags ?? [],
-            notes: contact.notes ?? [],
-            met: contact.met ?? "",
-            introRequested: contact.introRequested ?? false,
-          })));
-          if (typeof state.xp === "number") setXp(state.xp);
-          if (state.activeTab) setActiveTab(state.activeTab);
-          if (typeof state.shared === "boolean") setShared(state.shared);
-          if (state.introductions) setIntroductions(state.introductions);
-          if (state.returnTo) setReturnTo(state.returnTo);
-          if (state.profile?.circle) setCircleName(state.profile.circle);
-        }
-      }
+      if (session) setDemoSession(session);
     } catch {}
     setHydrated(true);
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (!hydrated || !demoUserId) return;
-    const state: PersistedState = {
-      screen,
-      returnTo,
-      profile: profileForLocalCache(profile),
-      contacts,
-      xp,
-      activeTab,
-      shared,
-      introductions,
-    };
-    try {
-      localStorage.setItem(`${STORAGE_KEY}_${demoUserId}`, JSON.stringify(state));
-    } catch {
-      // The app still works when local storage is disabled or full.
+    if (!hydrated) return;
+    const slug = new URLSearchParams(window.location.search).get("shareback");
+    if (slug) setPendingShareBackSlug(slug);
+  }, [hydrated]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!hydrated || !demoSession) {
+      setDemoMe(undefined);
+      return;
     }
-  }, [activeTab, contacts, demoUserId, hydrated, introductions, profile, returnTo, screen, shared, xp]);
+    let active = true;
+    void getDemoMe({ sessionToken: demoSession })
+      .then((user) => { if (active) setDemoMe(user); })
+      .catch(() => { if (active) setDemoMe(null); });
+    return () => { active = false; };
+  }, [demoSession, getDemoMe, hydrated]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!demoSession || demoMe === undefined) return;
+    if (!demoMe) {
+      localStorage.removeItem(SESSION_KEY);
+      setDemoSession(null);
+      setDemoUserId(null);
+      setProfile(INITIAL_PROFILE);
+      setScreen("auth");
+      setAuthError("Your session expired. Sign in again.");
+      return;
+    }
+    setDemoUserId(demoMe.userId);
+  }, [demoMe, demoSession]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -248,14 +327,28 @@ export default function HarmoniApp() {
     restoredDemoUser.current = demoUserId;
     if (demoCard) {
       const storedArt = Number.parseInt(demoCard.theme.style, 10);
+      const cardFields = demoCard.fields.map((field: {
+        kind: string;
+        label: string;
+        abbreviation?: string;
+        color?: string;
+        value: string;
+      }) => ({
+        id: field.kind,
+        label: field.label,
+        abbreviation: field.abbreviation ?? field.kind.slice(0, 2),
+        color: field.color ?? "#1d5647",
+        value: field.value,
+      }));
       const restoredProfile: Profile = {
         ...INITIAL_PROFILE,
         name: demoCard.fullName,
         title: demoCard.jobTitle ?? "",
         company: demoCard.company ?? "",
         headline: demoCard.headline ?? "",
-        email: demoCard.email ?? profile.email,
-        phone: demoCard.phone ?? profile.phone,
+        publicUrl: `${window.location.origin}/c/${demoCard.slug}`,
+        email: cardFields.find((field) => field.id === "email")?.value ?? "",
+        phone: cardFields.find((field) => field.id === "phone")?.value ?? "",
         photo: demoCard.photoUrl ?? profile.photo,
         photoStorageId: demoCard.photoStorageId ?? profile.photoStorageId,
         cover: demoCard.coverUrl ?? profile.cover,
@@ -263,20 +356,12 @@ export default function HarmoniApp() {
         logo: demoCard.logoMode === "auto" ? "auto" : demoCard.logoUrl ?? profile.logo,
         logoStorageId: demoCard.logoStorageId ?? profile.logoStorageId,
         squarePhoto: demoCard.squarePhoto ?? profile.squarePhoto,
-        circle: demoCard.circle ?? profile.circle,
-        wants: demoCard.wants ?? profile.wants,
-        haves: demoCard.haves ?? profile.haves,
         qrOnBack: demoCard.qrOnBack ?? profile.qrOnBack,
         includeMeetingPlace: demoCard.includeMeetingPlace ?? profile.includeMeetingPlace,
-        fields: demoCard.fields.length ? demoCard.fields.map((field) => ({
-          id: field.kind,
-          label: field.label,
-          abbreviation: field.abbreviation ?? field.kind.slice(0, 2),
-          color: field.color ?? "#1d5647",
-          value: field.value,
-        })) : profile.fields,
+        fields: cardFields.length ? cardFields.filter((field) => field.id !== "email" && field.id !== "phone") : profile.fields,
         art: Number.isFinite(storedArt) ? storedArt : profile.art,
       };
+      lastSavedProfile.current = JSON.stringify(restoredProfile);
       setProfile(restoredProfile);
       setCircleName(restoredProfile.circle);
       setScreen(demoCard.status === "published" ? "home" : "details");
@@ -318,6 +403,55 @@ export default function HarmoniApp() {
   }, [demoCard, demoSession, demoUserId]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!myCircle) return;
+    setCircleName(myCircle.name);
+    setProfile((current) => current.circle === myCircle.name ? current : { ...current, circle: myCircle.name });
+  }, [myCircle]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  useEffect(() => {
+    if (screen !== "home" || activeTab !== "circle" || !demoSession) return;
+    let active = true;
+    void refreshMatches({ sessionToken: demoSession })
+      .then((suggestions) => { if (active) setMatchingSuggestions(suggestions); })
+      .catch((error: unknown) => {
+        if (active) setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Matches could not be refreshed.");
+      });
+    return () => { active = false; };
+  }, [activeTab, demoSession, refreshMatches, screen]);
+
+  useEffect(() => {
+    if (!hydrated || !demoSession || !demoUserId || demoCard === undefined || !profile.name.trim()) return;
+    if (screen !== "details" && screen !== "design" && screen !== "home") return;
+    const snapshot = JSON.stringify(profile);
+    if (snapshot === lastSavedProfile.current) return;
+    const timeout = window.setTimeout(() => {
+      setSavingCard(true);
+      void saveDemoProfile(toDemoCardPayload(profile, demoSession, demoCard?.status === "published" ? "published" : "draft"))
+        .then((saved) => {
+          const savedProfile = {
+            ...profile,
+            publicUrl: `${window.location.origin}/c/${saved.slug}`,
+            photo: saved.photoUrl ?? "",
+            cover: saved.coverUrl ?? "",
+            logo: profile.logo === "auto" ? "auto" : saved.logoUrl ?? "",
+          };
+          lastSavedProfile.current = JSON.stringify(savedProfile);
+          setProfile((current) => current.publicUrl === savedProfile.publicUrl
+            ? current
+            : { ...current, publicUrl: savedProfile.publicUrl });
+          setToast("Saved");
+        })
+        .catch((error: unknown) => {
+          setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Your card could not be saved.");
+        })
+        .finally(() => setSavingCard(false));
+    }, 650);
+    return () => window.clearTimeout(timeout);
+  }, [demoCard, demoSession, demoUserId, hydrated, profile, saveDemoProfile, screen]);
+
   useEffect(() => {
     document.body.classList.toggle("w", screen === "welcome");
     return () => document.body.classList.remove("w");
@@ -343,6 +477,7 @@ export default function HarmoniApp() {
     setAuthMode("signup");
     setAuthError("");
     setAuthPassword("");
+    setAuthResetCode("");
     navigate("auth");
   }
 
@@ -353,16 +488,35 @@ export default function HarmoniApp() {
     setAuthError("");
 
     try {
+      if (authMode === "forgot") {
+        const result = await requestPasswordReset({ username: authUsername });
+        if (!result.resetCode) {
+          setAuthError("No demo account was found for that username or email.");
+          return;
+        }
+        setAuthResetCode(result.resetCode);
+        setAuthResetCodeValue("");
+        setAuthMode("reset");
+        return;
+      }
+      if (authMode === "reset") {
+        await resetDemoPassword({ code: authResetCodeValue, newPassword: authPassword });
+        setAuthMode("signin");
+        setAuthPassword("");
+        setAuthResetCode("");
+        setAuthResetCodeValue("");
+        setToast("Your password was reset. Sign in with your new password.");
+        return;
+      }
       const result = authMode === "signup"
-        ? await registerDemo({ username: authUsername, password: authPassword })
-        : await signInDemo({ username: authUsername, password: authPassword });
+        ? await signUpDemo({ username: authUsername, password: authPassword })
+        : await logInDemo({ username: authUsername, password: authPassword });
 
       restoredDemoUser.current = null;
       setDemoSession(result.sessionToken);
       setDemoUserId(result.userId);
       try {
         localStorage.setItem(SESSION_KEY, result.sessionToken);
-        localStorage.setItem(USER_ID_KEY, result.userId);
       } catch {
         setToast("You’re signed in for this browser session.");
       }
@@ -372,8 +526,6 @@ export default function HarmoniApp() {
         navigate("home");
       } else {
         setProfile(INITIAL_PROFILE);
-        setContacts([]);
-        setXp(0);
         navigate("details");
       }
     } catch (error) {
@@ -402,7 +554,6 @@ export default function HarmoniApp() {
     }
     setSavingCard(false);
     setCircleName((current) => current || `${profile.name.trim().split(/\s+/)[0]}'s Circle`);
-    setXp((current) => Math.max(current, 100));
     navigate("logo");
   }
 
@@ -420,7 +571,6 @@ export default function HarmoniApp() {
             ? { ...profile, cover: dataUrl, coverStorageId: storageId }
             : { ...profile, logo: dataUrl, logoStorageId: storageId };
         setProfile(nextProfile);
-        if (kind === "photo" && !profile.photo) setXp((current) => current + 100);
 
         if (demoSession) {
           setSavingCard(true);
@@ -444,15 +594,25 @@ export default function HarmoniApp() {
       setSavingCard(true);
       try {
         setProfile(await persistDemoProfile(completedProfile, "published"));
+        await renameMyCircle({ sessionToken: demoSession, name });
       } catch (error) {
         setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Your card couldn’t be saved.");
         setSavingCard(false);
         return;
       }
+      if (pendingShareBackSlug) {
+        try {
+          await sendExchange({ sessionToken: demoSession, slug: pendingShareBackSlug });
+          setToast("Your card exchange request was sent.");
+        } catch (error) {
+          setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Your card is ready, but the exchange request could not be sent.");
+        }
+        setPendingShareBackSlug(null);
+        router.replace("/");
+      }
       setSavingCard(false);
     }
     setCircleName(name);
-    setXp((current) => current + 150);
     setActiveTab("card");
     navigate("home");
   }
@@ -488,9 +648,7 @@ export default function HarmoniApp() {
     try {
       await removeDemoAccount({ sessionToken: demoSession });
       try {
-        if (demoUserId) localStorage.removeItem(`${STORAGE_KEY}_${demoUserId}`);
         localStorage.removeItem(SESSION_KEY);
-        localStorage.removeItem(USER_ID_KEY);
       } catch {}
 
       restoredDemoUser.current = null;
@@ -499,22 +657,37 @@ export default function HarmoniApp() {
       setAuthUsername("");
       setAuthPassword("");
       setProfile(INITIAL_PROFILE);
-      setContacts([]);
-      setXp(0);
       setCircleName("");
       setShared(false);
-      setIntroductions({});
       setContactView(null);
-      setSelectedContactName("");
+      setSelectedContactId(null);
       setActiveTab("card");
       setQuery("");
       setSheet(null);
-      navigate("welcome");
+      navigate("auth");
       setToast("Your account was deleted.");
     } catch (error) {
       setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Your account couldnâ€™t be deleted. Try again.");
     } finally {
       setDeletingAccount(false);
+    }
+  }
+
+  async function deleteCard() {
+    if (!demoSession) return;
+    setDeletingCard(true);
+    try {
+      await removeDemoCard({ sessionToken: demoSession });
+      setProfile(INITIAL_PROFILE);
+      setCircleName("");
+      setShared(false);
+      setSheet(null);
+      navigate("details");
+      setToast("Your card was deleted.");
+    } catch (error) {
+      setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Your card could not be deleted.");
+    } finally {
+      setDeletingCard(false);
     }
   }
 
@@ -527,7 +700,6 @@ export default function HarmoniApp() {
     if (demoSession) void logoutDemo({ sessionToken: demoSession }).catch(() => undefined);
     try {
       localStorage.removeItem(SESSION_KEY);
-      localStorage.removeItem(USER_ID_KEY);
     } catch {}
     restoredDemoUser.current = null;
     setDemoSession(null);
@@ -535,67 +707,61 @@ export default function HarmoniApp() {
     setAuthPassword("");
     setAuthUsername("");
     setProfile(INITIAL_PROFILE);
-    setContacts([]);
-    setXp(0);
     setCircleName("");
     setShared(false);
-    setIntroductions({});
     setContactView(null);
-    setSelectedContactName("");
+    setSelectedContactId(null);
     setActiveTab("card");
-    navigate("welcome");
+    setAuthMode("signin");
+    navigate("auth");
   }
 
-  async function shareCard() {
+  async function resetDemo() {
+    if (!demoSession) return;
+    try {
+      const result = await startDemoOver({ sessionToken: demoSession });
+      localStorage.setItem(SESSION_KEY, result.sessionToken);
+      restoredDemoUser.current = null;
+      setDemoSession(result.sessionToken);
+      setProfile(INITIAL_PROFILE);
+      setCircleName("");
+      setShared(false);
+      setActiveTab("card");
+      setAuthUsername("");
+      setAuthPassword("");
+      navigate("details");
+      setToast("Your demo is ready to start over.");
+    } catch (error) {
+      setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "The demo could not be reset.");
+    }
+  }
+
+  function shareCard() {
     setSheet(null);
+    if (!demoCard?.slug) {
+      setToast("Save your card before sharing it.");
+      return;
+    }
+    setSheet("share-link");
     if (!shared) {
       setShared(true);
-      setXp((current) => current + 100);
-    }
-    const slug = demoCard?.slug || authUsername.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-") || profile.name.toLowerCase().replace(/[^a-z0-9]+/g, "");
-    const url = `https://harmoni.app/c/${slug || "my-card"}`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: profile.name || "My Harmoni card", url });
-        setToast("Your card is ready to share");
-      } else if (navigator.clipboard) {
-        await navigator.clipboard.writeText(url);
-        setToast("Link copied");
-      } else {
-        setToast(url);
+      if (demoSession) {
+        void recordCardShare({ sessionToken: demoSession }).catch((error: unknown) => {
+          setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Your share could not be recorded.");
+        });
       }
-    } catch {
-      setToast("Your card link is ready: harmoni.app/c/" + (slug || "my-card"));
     }
   }
 
-  function addDemoContact() {
-    if (!contacts.some((contact) => contact.name === "Jack Moreno")) {
-      setContacts((current) => [
-        {
-          name: "Jack Moreno",
-          title: "Founder",
-          company: "Independent",
-          email: "jack@moreno.studio",
-          phone: "",
-          photo: "",
-          when: "Today",
-          source: "Scanned",
-          tags: ["New connection"],
-          notes: [],
-          met: "",
-          introRequested: false,
-        },
-        ...current,
-      ]);
-      setXp((current) => current + 250);
-      setToast("You and Jack are connected");
-    } else {
-      setToast("You’re already connected");
+  function handleScannedLink(link: string) {
+    try {
+      const url = new URL(link, window.location.origin);
+      const match = url.pathname.match(/^\/c\/([^/]+)\/?$/);
+      if (!match) throw new Error("Paste or scan a Harmoni card link.");
+      router.push("/c/" + encodeURIComponent(match[1]));
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "That link is not a Harmoni card.");
     }
-    setActiveTab("contacts");
-    setSheet(null);
-    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function handleMenuAction(action: MenuAction) {
@@ -616,15 +782,30 @@ export default function HarmoniApp() {
         break;
       case "signature":
         setSheet(null);
-        setToast(`${profile.name} · ${profile.title || "Harmoni"} · harmoni.app/c/${profile.name.toLowerCase().replace(/[^a-z0-9]+/g, "")}`);
+        setToast(`${profile.name} · ${profile.title || "Harmoni"} · ${demoCard?.slug ? `${window.location.origin}/c/${demoCard.slug}` : "Save your card first"}`);
         break;
       case "scan":
         setSheet(null);
         setActiveTab("scan");
         break;
+      case "access-log":
+        navigate("access-log");
+        break;
+      case "seed-data":
+        setSheet(null);
+        if (demoSession) {
+          void seedDemoData({ sessionToken: demoSession })
+            .then(async (result) => {
+              const suggestions = await refreshMatches({ sessionToken: demoSession });
+              setMatchingSuggestions(suggestions);
+              setToast(result.alreadyLoaded ? "Demo data is already loaded." : "Demo circle and matching context added.");
+            })
+            .catch((error: unknown) => setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Demo data could not be loaded."));
+        }
+        break;
       case "reset":
         setSheet(null);
-        clearDemoSession();
+        void resetDemo();
         break;
       case "signout":
         setSheet(null);
@@ -632,6 +813,9 @@ export default function HarmoniApp() {
         break;
       case "delete-account":
         setSheet("delete-account");
+        break;
+      case "delete-card":
+        setSheet("delete-card");
         break;
     }
   }
@@ -643,22 +827,38 @@ export default function HarmoniApp() {
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function saveContactEntry() {
+  async function saveContactEntry() {
     const value = entryValue.trim();
-    if (!value || !selectedContactName) return;
-    setContacts((current) => current.map((contact) => {
-      if (contact.name !== selectedContactName) return contact;
-      if (sheet === "tag") {
-        return { ...contact, tags: contact.tags.includes(value) ? contact.tags : [...contact.tags, value] };
+    if (!value || !selectedContactId || !demoSession) return;
+    try {
+      if (sheet === "tag" && selectedContact) {
+        const tags = selectedContact.tags.includes(value) ? selectedContact.tags : [...selectedContact.tags, value];
+        await updateContact({ sessionToken: demoSession, contactId: selectedContactId, tags });
+      } else if (sheet === "met") {
+        await updateContact({ sessionToken: demoSession, contactId: selectedContactId, metAt: Date.now(), metLocation: value });
+      } else if (sheet === "note") {
+        await addContactNote({ sessionToken: demoSession, contactId: selectedContactId, body: value });
       }
-      const at = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-      return { ...contact, notes: [{ text: value, at }, ...contact.notes] };
-    }));
-    setEntryValue("");
-    setSheet(null);
+      setEntryValue("");
+      setSheet(null);
+      setToast(sheet === "tag" ? "Tag saved" : sheet === "met" ? "Meeting place saved" : "Note saved");
+    } catch (error) {
+      setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Could not save that contact detail.");
+    }
   }
 
-  const selectedContact = contacts.find((contact) => contact.name === selectedContactName);
+  async function saveCircleName() {
+    const name = circleName.trim();
+    if (!demoSession || !name) return;
+    try {
+      await renameMyCircle({ sessionToken: demoSession, name });
+      setProfile((current) => ({ ...current, circle: name }));
+      setSheet(null);
+      setToast("Circle name saved");
+    } catch (error) {
+      setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Could not rename your circle.");
+    }
+  }
 
   return (
     <>
@@ -671,13 +871,23 @@ export default function HarmoniApp() {
             password={authPassword}
             error={authError}
             busy={authBusy}
+            resetCode={authResetCode}
+            resetCodeValue={authResetCodeValue}
             onUsername={setAuthUsername}
             onPassword={setAuthPassword}
+            onResetCode={setAuthResetCodeValue}
             onSubmit={(event) => void submitDemoAuth(event)}
             onToggleMode={() => {
-              setAuthMode((mode) => mode === "signup" ? "signin" : "signup");
+              setAuthMode((mode) => mode === "signup" || mode === "reset" ? "signin" : "signup");
               setAuthError("");
               setAuthPassword("");
+              setAuthResetCode("");
+            }}
+            onForgotPassword={() => {
+              setAuthMode("forgot");
+              setAuthError("");
+              setAuthPassword("");
+              setAuthResetCode("");
             }}
             onBack={() => navigate("welcome")}
           />
@@ -691,7 +901,6 @@ export default function HarmoniApp() {
             xp={xp}
             onBack={() => navigate("details")}
             onAuto={() => {
-              if (!profile.logo) setXp((current) => current + 50);
               setProfile((current) => ({ ...current, logo: "auto", logoStorageId: null }));
             }}
             onUpload={(file) => handleImage(file, "logo")}
@@ -731,22 +940,61 @@ export default function HarmoniApp() {
         {screen === "design" ? (
           <DesignScreen
             profile={profile}
+            personaItems={personaItems ?? []}
             saving={savingCard}
             onArt={(art) => setProfile((current) => ({ ...current, art }))}
             onUpdate={(updates) => setProfile((current) => ({ ...current, ...updates }))}
             onUpload={handleImage}
             onBack={() => navigate(returnTo)}
             onSave={() => void saveDesign()}
-            onReset={() => {
-              setProfile(INITIAL_PROFILE);
-              setContacts([]);
-              setXp(0);
-              setShared(false);
-              setIntroductions({});
-              setCircleName("");
-              setActiveTab("card");
-              setContactView(null);
-              navigate("welcome");
+            onReset={() => void resetDemo()}
+            onCreatePersonaItem={(kind, text) => {
+              if (!demoSession) return;
+              void createPersonaItem({ sessionToken: demoSession, kind, text })
+                .then(() => setToast("Context saved as a private draft."))
+                .catch((error: unknown) => setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Context could not be saved."));
+            }}
+            onUpdatePersonaItem={(itemId, text) => {
+              if (!demoSession) return;
+              void updatePersonaItem({ sessionToken: demoSession, itemId, text })
+                .then(() => setToast("Context updated. Approve it again before matching."))
+                .catch((error: unknown) => setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Context could not be updated."));
+            }}
+            onApprovePersonaItem={(itemId) => {
+              if (!demoSession) return;
+              void approvePersonaItem({ sessionToken: demoSession, itemId })
+                .then(() => setToast("Context approved."))
+                .catch((error: unknown) => setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Context could not be approved."));
+            }}
+            onArchivePersonaItem={(itemId) => {
+              if (!demoSession) return;
+              void archivePersonaItem({ sessionToken: demoSession, itemId })
+                .then(() => setToast("Context archived."))
+                .catch((error: unknown) => setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Context could not be archived."));
+            }}
+            onSetPersonaVisibility={(itemId, visibility) => {
+              if (!demoSession) return;
+              void setPersonaVisibility({ sessionToken: demoSession, itemId, visibility })
+                .then(() => setToast("Context visibility saved."))
+                .catch((error: unknown) => setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Context visibility could not be saved."));
+            }}
+            onGrantMatchingToCircle={(itemId) => {
+              if (!demoSession || !myCircle) return;
+              void grantPersonaAccess({ sessionToken: demoSession, itemId, granteeCircleId: myCircle._id, purpose: "matching" })
+                .then(() => setToast("Matching access granted to your circle."))
+                .catch((error: unknown) => setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Access could not be granted."));
+            }}
+          />
+        ) : null}
+        {screen === "access-log" ? (
+          <AccessLogScreen
+            rows={accessLog ?? []}
+            onBack={() => navigate("home")}
+            onRevoke={(grantId) => {
+              if (!demoSession) return;
+              void revokePersonaAccess({ sessionToken: demoSession, grantId })
+                .then(() => setToast("Access revoked."))
+                .catch((error: unknown) => setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Access could not be revoked."));
             }}
           />
         ) : null}
@@ -761,7 +1009,7 @@ export default function HarmoniApp() {
               />
             ) : null}
             {activeTab === "card" ? (
-              <MyCardScreen profile={profile} xp={xp} onShare={() => void shareCard()} />
+              <MyCardScreen profile={profile} xp={xp} awardedBadges={awardedBadges} onShare={() => void shareCard()} />
             ) : null}
             {activeTab === "contacts" && !contactView ? (
               <ContactsScreen
@@ -769,51 +1017,75 @@ export default function HarmoniApp() {
                 query={query}
                 onQuery={setQuery}
                 onScan={() => changeTab("scan")}
-                onSelect={(name) => {
-                  setSelectedContactName(name);
+                onSelect={(contactId) => {
+                  setSelectedContactId(contactId);
                   setContactView("detail");
                 }}
               />
             ) : null}
             {activeTab === "contacts" && contactView === "detail" && selectedContact ? (
-              <ContactDetailScreen
-                contact={selectedContact}
-                onBack={() => setContactView(null)}
-                onViewCard={() => setContactView("card")}
-                onAskIntro={() => {
-                  if (!selectedContact.introRequested) {
-                    setContacts((current) => current.map((contact) => contact.name === selectedContact.name ? { ...contact, introRequested: true } : contact));
-                    setXp((current) => current + 75);
-                    setToast(`Intro request sent through ${selectedContact.name}`);
-                  } else {
-                    setToast(`Waiting for ${selectedContact.name} to approve your request`);
-                  }
-                }}
-                onTag={() => { setEntryValue(""); setSheet("tag"); }}
-                onNote={() => { setEntryValue(""); setSheet("note"); }}
-              />
+              <ScreenErrorBoundary section="contact details">
+                <ContactDetailScreen
+                  contact={selectedContact}
+                  introNetwork={introNetwork}
+                  onBack={() => setContactView(null)}
+                  onViewCard={() => setContactView("card")}
+                  onAskIntro={(targetUserId) => {
+                    if (!demoSession || !selectedContact.linkedUserId) return;
+                    void requestIntroduction({ sessionToken: demoSession, introducerId: selectedContact.linkedUserId, targetUserId })
+                      .then(() => setToast(`Intro request sent through ${selectedContact.name}`))
+                      .catch((error: unknown) => setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Could not send that intro request."));
+                  }}
+                  onTag={() => { setEntryValue(""); setSheet("tag"); }}
+                  onNote={() => { setEntryValue(""); setSheet("note"); }}
+                  onMet={() => { setEntryValue(selectedContact.met); setSheet("met"); }}
+                />
+              </ScreenErrorBoundary>
             ) : null}
             {activeTab === "contacts" && contactView === "card" && selectedContact ? (
-              <ContactCardScreen contact={selectedContact} onBack={() => setContactView("detail")} />
+              <ScreenErrorBoundary section="contact card">
+                <ContactCardScreen contact={selectedContact} onBack={() => setContactView("detail")} />
+              </ScreenErrorBoundary>
             ) : null}
-            {activeTab === "scan" ? <ScanScreen profile={profile} onScan={addDemoContact} /> : null}
+            {activeTab === "scan" ? <ScanScreen onScan={handleScannedLink} /> : null}
             {activeTab === "circle" ? (
-              <CircleScreen
-                profile={profile}
-                contacts={contacts}
-                introductions={introductions}
-                onScan={() => changeTab("scan")}
-                onShare={() => void shareCard()}
-                onAskIntro={(name) => {
-                  if (introductions[name]) {
-                    setToast(`Waiting for ${contacts[0]?.name.split(" ")[0] ?? "your connection"} to approve`);
-                    return;
-                  }
-                  setIntroductions((current) => ({ ...current, [name]: true }));
-                  setXp((current) => current + 75);
-                  setToast(`Request sent to ${contacts[0]?.name.split(" ")[0] ?? "your connection"}`);
-                }}
-              />
+              <ScreenErrorBoundary section="your circle">
+                <CircleScreen
+                  profile={profile}
+                  contacts={contacts}
+                  circle={myCircle ?? null}
+                  exchangeRequests={exchangeInbox ?? []}
+                  introRequests={introInbox ?? []}
+                  suggestions={matchingSuggestions}
+                  onScan={() => changeTab("scan")}
+                  onShare={() => void shareCard()}
+                  onRename={() => setSheet("circle-name")}
+                  onAcceptExchange={(exchangeId) => {
+                    if (!demoSession) return;
+                    void acceptExchange({ sessionToken: demoSession, exchangeId })
+                      .then(() => setToast("Cards exchanged. You are now connected."))
+                      .catch((error: unknown) => setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Could not accept that exchange."));
+                  }}
+                  onDeclineExchange={(exchangeId) => {
+                    if (!demoSession) return;
+                    void declineExchange({ sessionToken: demoSession, exchangeId })
+                      .then(() => setToast("Exchange request declined."))
+                      .catch((error: unknown) => setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Could not decline that exchange."));
+                  }}
+                  onDecideIntro={(requestId, decision) => {
+                    if (!demoSession) return;
+                    void decideIntroduction({ sessionToken: demoSession, requestId, decision })
+                      .then(() => setToast(decision === "approve" ? "Introduction made." : "Intro request declined."))
+                      .catch((error: unknown) => setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Could not update that intro request."));
+                  }}
+                  onDismissMatch={(suggestionId) => {
+                    if (!demoSession) return;
+                    void dismissMatch({ sessionToken: demoSession, suggestionId })
+                      .then(() => setMatchingSuggestions((current) => current.filter((suggestion) => suggestion._id !== suggestionId)))
+                      .catch((error: unknown) => setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Match could not be dismissed."));
+                  }}
+                />
+              </ScreenErrorBoundary>
             ) : null}
           </>
         ) : null}
@@ -825,6 +1097,12 @@ export default function HarmoniApp() {
       {sheet === "delete-account" ? (
         <DeleteAccountSheet busy={deletingAccount} onConfirm={() => void deleteAccount()} onDismiss={() => setSheet(null)} />
       ) : null}
+      {sheet === "delete-card" ? (
+        <DeleteCardSheet busy={deletingCard} onConfirm={() => void deleteCard()} onDismiss={() => setSheet(null)} />
+      ) : null}
+      {sheet === "share-link" && demoCard?.slug ? (
+        <ShareLinkSheet url={`${window.location.origin}/c/${demoCard.slug}`} onDismiss={() => setSheet(null)} />
+      ) : null}
       {sheet === "setup" ? (
         <SetupGuide
           onDismiss={() => setSheet(null)}
@@ -833,7 +1111,7 @@ export default function HarmoniApp() {
           onScan={() => changeTab("scan")}
         />
       ) : null}
-      {sheet === "tag" || sheet === "note" ? (
+      {sheet === "tag" || sheet === "note" || sheet === "met" ? (
         <ContactEntrySheet
           kind={sheet}
           value={entryValue}
@@ -841,6 +1119,9 @@ export default function HarmoniApp() {
           onSave={saveContactEntry}
           onDismiss={() => setSheet(null)}
         />
+      ) : null}
+      {sheet === "circle-name" ? (
+        <CircleNameSheet value={circleName} onChange={setCircleName} onSave={() => void saveCircleName()} onDismiss={() => setSheet(null)} />
       ) : null}
       {toast ? <div className="toast" role="status">{toast}</div> : null}
     </>

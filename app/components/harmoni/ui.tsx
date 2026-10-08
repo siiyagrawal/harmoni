@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { QRCodeSVG } from "qrcode.react";
 
 export type IconName =
   | "back"
@@ -126,46 +127,8 @@ export function Avatar({
   );
 }
 
-export function QrCode({ seed, className = "" }: { seed: string; className?: string }) {
-  let state = nameHash(seed);
-  const modules: Array<[number, number]> = [];
-
-  for (let y = 0; y < 21; y += 1) {
-    for (let x = 0; x < 21; x += 1) {
-      let insideFinder = false;
-      let dark = false;
-
-      for (const [left, top] of [[0, 0], [14, 0], [0, 14]]) {
-        const dx = x - left;
-        const dy = y - top;
-        if (dx >= 0 && dx < 7 && dy >= 0 && dy < 7) {
-          insideFinder = true;
-          dark = dx === 0 || dx === 6 || dy === 0 || dy === 6 || (dx >= 2 && dx <= 4 && dy >= 2 && dy <= 4);
-          break;
-        }
-      }
-
-      if (!insideFinder) {
-        state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-        dark = (state >>> 27) % 2 === 1;
-      }
-
-      if (dark) modules.push([x, y]);
-    }
-  }
-
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 21 21"
-      fill="currentColor"
-      shapeRendering="crispEdges"
-      role="img"
-      aria-label="Decorative QR code"
-    >
-      {modules.map(([x, y]) => <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" />)}
-    </svg>
-  );
+export function QrCode({ value, className = "" }: { value: string; className?: string }) {
+  return <QRCodeSVG value={value} className={className} size={128} level="M" title="Scan to open this Harmoni card" />;
 }
 
 export function CardArtwork({ variant = 0 }: { variant?: number }) {

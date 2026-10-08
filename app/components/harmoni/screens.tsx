@@ -1,11 +1,42 @@
-import { useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
+import { Component, Fragment } from "react";
 import type { ChangeEvent, FormEvent, KeyboardEvent, ReactNode } from "react";
+import type { Doc, Id } from "../../../convex/_generated/dataModel";
+import jsQR from "jsqr";
 import DigitalCard from "./digital-card";
 import type { Contact, Profile, ProfileField } from "./types";
 import { CARD_ARTS } from "./types";
-import { Avatar, CardArtwork, Icon, ProgressRing, QrCode } from "./ui";
+import { Avatar, CardArtwork, Icon, ProgressRing } from "./ui";
 
 type TextField = "name" | "title" | "company" | "headline" | "email" | "phone";
+
+type ScreenErrorBoundaryProps = { children: ReactNode; section: string };
+type ScreenErrorBoundaryState = { hasError: boolean; retryKey: number };
+
+export class ScreenErrorBoundary extends Component<ScreenErrorBoundaryProps, ScreenErrorBoundaryState> {
+  state: ScreenErrorBoundaryState = { hasError: false, retryKey: 0 };
+
+  static getDerivedStateFromError(): Partial<ScreenErrorBoundaryState> {
+    return { hasError: true };
+  }
+
+  private retry = () => {
+    this.setState((current) => ({ hasError: false, retryKey: current.retryKey + 1 }));
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="card screen-error" role="alert">
+          <b>We couldn&apos;t load {this.props.section}.</b>
+          <p>Your saved information is safe. Try loading this section again.</p>
+          <button className="btn g s" type="button" onClick={this.retry}>Try again</button>
+        </div>
+      );
+    }
+    return <Fragment key={this.state.retryKey}>{this.props.children}</Fragment>;
+  }
+}
 
 function StepHeader({
   progress,
@@ -38,7 +69,7 @@ export function WelcomeScreen({ onStart }: { onStart: () => void }) {
       <div className="fan" aria-hidden="true">
         <div className="fc c1" />
         <div className="fc c2" />
-        <div className="fc c3"><QrCode seed="harmoni" /></div>
+        <div className="fc c3" />
       </div>
       <h1 className="hero">Your card.<br /><i>Your circle.</i></h1>
       <p className="c">Meet someone, swap cards, and open doors through each other&apos;s networks.</p>
@@ -55,70 +86,77 @@ export function DemoAuthScreen({
   password,
   error,
   busy,
+  resetCode,
+  resetCodeValue,
   onUsername,
   onPassword,
+  onResetCode,
   onSubmit,
   onToggleMode,
+  onForgotPassword,
   onBack,
 }: {
-  mode: "signup" | "signin";
+  mode: "signup" | "signin" | "forgot" | "reset";
   username: string;
   password: string;
   error: string;
   busy: boolean;
+  resetCode: string;
+  resetCodeValue: string;
   onUsername: (value: string) => void;
   onPassword: (value: string) => void;
+  onResetCode: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onToggleMode: () => void;
+  onForgotPassword: () => void;
   onBack: () => void;
 }) {
+  const isSignup = mode === "signup";
+  const isResetRequest = mode === "forgot";
+  const isReset = mode === "reset";
   return (
     <>
       <div className="hd">
-        <button className="bkb" type="button" onClick={onBack} aria-label="Back">
-          <Icon name="back" />
-        </button>
-        <span className="tag">Demo account</span>
+        <button className="bkb" type="button" onClick={onBack} aria-label="Back"><Icon name="back" /></button>
+        <span className="tag">{isResetRequest || isReset ? "Password reset" : "Demo account"}</span>
       </div>
-      <h1>{mode === "signup" ? "Create your account" : "Welcome back"}</h1>
-      <p>Use a username and password to save your card. No email or verification code needed.</p>
+      <h1>{isSignup ? "Create your account" : isResetRequest ? "Forgot password?" : isReset ? "Choose a new password" : "Welcome back"}</h1>
+      <p>{isResetRequest || isReset ? "Reset your demo password with a one-time code shown here. No email is sent." : "Use a username and password to save your card. No email or verification code needed."}</p>
       <form className="auth-form" onSubmit={onSubmit}>
-        <label className="f">
-          <span>Username</span>
-          <input
-            value={username}
-            onChange={(event) => onUsername(event.target.value)}
-            autoComplete="username"
-            minLength={3}
-            maxLength={24}
-            required
-          />
-        </label>
-        <label className="f">
-          <span>Password</span>
+        {mode !== "reset" ? <label className="f">
+          <span>Username or email</span>
+          <input value={username} onChange={(event) => onUsername(event.target.value)} autoComplete="username" minLength={3} maxLength={254} required />
+        </label> : null}
+        {isReset ? <label className="f">
+          <span>Reset code</span>
+          <input value={resetCodeValue} onChange={(event) => onResetCode(event.target.value)} autoComplete="one-time-code" maxLength={8} required />
+        </label> : null}
+        {!isResetRequest ? <label className="f">
+          <span>{isReset ? "New password" : "Password"}</span>
           <input
             value={password}
             onChange={(event) => onPassword(event.target.value)}
             type="password"
-            autoComplete={mode === "signup" ? "new-password" : "current-password"}
-            minLength={8}
+            autoComplete={isSignup || isReset ? "new-password" : "current-password"}
+            minLength={isSignup || isReset ? 8 : undefined}
             maxLength={256}
             required
           />
-        </label>
+        </label> : null}
+        {resetCode ? <p className="auth-reset-code" role="status">Demo reset code: <b>{resetCode}</b></p> : null}
         {error ? <p className="auth-error" role="alert">{error}</p> : null}
         <div className="auth-actions">
           <button className="btn pu" type="submit" disabled={busy}>
-            {busy ? "Please wait…" : mode === "signup" ? "Create account" : "Sign in"}
+            {busy ? "Please wait…" : isSignup ? "Create account" : isResetRequest ? "Get reset code" : isReset ? "Reset password" : "Sign in"}
           </button>
         </div>
       </form>
-      <p className="auth-switch">
-        {mode === "signup" ? "Already have an account?" : "New to Harmoni?"}{" "}
-        <button className="lk" type="button" onClick={onToggleMode}>
-          {mode === "signup" ? "Sign in" : "Create an account"}
-        </button>
-      </p>
+      {mode === "signin" ? <p className="auth-switch"><button className="lk" type="button" onClick={onForgotPassword}>Forgot password?</button></p> : null}
+      {mode === "signup" || mode === "signin" ? <p className="auth-switch">
+        {isSignup ? "Already have an account?" : "New to Harmoni?"}{" "}
+        <button className="lk" type="button" onClick={onToggleMode}>{isSignup ? "Sign in" : "Create an account"}</button>
+      </p> : null}
+      {isReset ? <p className="auth-switch">Password updated? <button className="lk" type="button" onClick={onToggleMode}>Sign in</button></p> : null}
     </>
   );
 }
@@ -347,6 +385,7 @@ export function CircleSetupScreen({
 
 export function DesignScreen({
   profile,
+  personaItems,
   saving,
   onArt,
   onUpdate,
@@ -354,8 +393,15 @@ export function DesignScreen({
   onBack,
   onSave,
   onReset,
+  onCreatePersonaItem,
+  onUpdatePersonaItem,
+  onApprovePersonaItem,
+  onArchivePersonaItem,
+  onSetPersonaVisibility,
+  onGrantMatchingToCircle,
 }: {
   profile: Profile;
+  personaItems: Pick<Doc<"personaItems">, "_id" | "kind" | "text" | "tags" | "visibility" | "status">[];
   saving: boolean;
   onArt: (art: number) => void;
   onUpdate: (updates: Partial<Profile>) => void;
@@ -363,9 +409,16 @@ export function DesignScreen({
   onBack: () => void;
   onSave: () => void;
   onReset: () => void;
+  onCreatePersonaItem: (kind: "want" | "have", text: string) => void;
+  onUpdatePersonaItem: (itemId: Id<"personaItems">, text: string) => void;
+  onApprovePersonaItem: (itemId: Id<"personaItems">) => void;
+  onArchivePersonaItem: (itemId: Id<"personaItems">) => void;
+  onSetPersonaVisibility: (itemId: Id<"personaItems">, visibility: "private" | "connections" | "circle" | "custom") => void;
+  onGrantMatchingToCircle: (itemId: Id<"personaItems">) => void;
 }) {
   const [needInput, setNeedInput] = useState("");
   const [offerInput, setOfferInput] = useState("");
+  const [personaDrafts, setPersonaDrafts] = useState<Record<string, string>>({});
   const [confirmDelete, setConfirmDelete] = useState(false);
   const fieldOptions: ProfileField[] = [
     { id: "linkedin", label: "LinkedIn", abbreviation: "in", color: "#0a66c2", value: "" },
@@ -376,12 +429,11 @@ export function DesignScreen({
     { id: "other", label: "Other link", abbreviation: "↗", color: "#8e8e93", value: "" },
   ];
 
-  function addSkill(kind: "wants" | "haves") {
-    const value = (kind === "wants" ? needInput : offerInput).trim();
+  function addSkill(kind: "want" | "have") {
+    const value = (kind === "want" ? needInput : offerInput).trim();
     if (!value) return;
-    const current = profile[kind];
-    if (!current.includes(value)) onUpdate({ [kind]: [...current, value] });
-    if (kind === "wants") setNeedInput("");
+    onCreatePersonaItem(kind, value);
+    if (kind === "want") setNeedInput("");
     else setOfferInput("");
   }
 
@@ -398,7 +450,7 @@ export function DesignScreen({
     onUpdate({ fields: next });
   }
 
-  function handleEnter(event: KeyboardEvent<HTMLInputElement>, kind: "wants" | "haves") {
+  function handleEnter(event: KeyboardEvent<HTMLInputElement>, kind: "want" | "have") {
     if (event.key === "Enter") {
       event.preventDefault();
       addSkill(kind);
@@ -446,18 +498,27 @@ export function DesignScreen({
         </label>
       ))}
       <h2>Haves and wants</h2>
-      <p>Tell your circle what you need and what you can offer. Harmoni uses it to suggest the right intros.</p>
-      {([
-        ["wants", "What I need", needInput, setNeedInput, "Seed investors"],
-        ["haves", "What I can help with", offerInput, setOfferInput, "Hiring engineers"],
-      ] as const).map(([kind, title, value, setValue, placeholder]) => (
+      <p>Tell Harmoni what you need and what you can offer. Only approved context shared with matching can be used.</p>
+      <div className="card persona-protected-note"><b>Your context is protected</b><div className="tag">Drafts stay private. You choose what to approve and who can use it for matching.</div></div>
+      {[
+        { kind: "want" as const, title: "What I need", value: needInput, setValue: setNeedInput, placeholder: "Seed investors" },
+        { kind: "have" as const, title: "What I can help with", value: offerInput, setValue: setOfferInput, placeholder: "Hiring engineers" },
+      ].map(({ kind, title, value, setValue, placeholder }) => (
         <div className="card" key={kind}>
           <b>{title}</b>
           <div className="skill-chips">
-            {profile[kind].length ? profile[kind].map((skill, index) => (
-              <span className="chip" key={`${kind}-${index}`}>
-                {skill}<button type="button" onClick={() => onUpdate({ [kind]: profile[kind].filter((_, i) => i !== index) })} aria-label={`Remove ${skill}`}>×</button>
-              </span>
+            {personaItems.filter((item) => item.kind === kind).length ? personaItems.filter((item) => item.kind === kind).map((item) => (
+              <div className="persona-item" key={item._id}>
+                <input value={personaDrafts[String(item._id)] ?? item.text} aria-label={title + " context"} onChange={(event) => setPersonaDrafts((current) => ({ ...current, [String(item._id)]: event.target.value }))} />
+                {personaDrafts[String(item._id)] !== undefined && personaDrafts[String(item._id)] !== item.text ? <button className="pill" type="button" onClick={() => { onUpdatePersonaItem(item._id, personaDrafts[String(item._id)] ?? item.text); setPersonaDrafts((current) => { const next = { ...current }; delete next[String(item._id)]; return next; }); }}>Save</button> : null}
+                <select className="pill" value={item.visibility} aria-label="Context visibility" onChange={(event) => onSetPersonaVisibility(item._id, event.target.value as "private" | "connections" | "circle" | "custom")}>
+                  <option value="private">Private</option><option value="connections">Connections</option><option value="circle">Circle</option><option value="custom">Custom</option>
+                </select>
+                <span className="tag">{item.status}</span>
+                {item.status === "draft" ? <button className="pill" type="button" onClick={() => onApprovePersonaItem(item._id)}>Approve</button> : null}
+                {item.status !== "archived" ? <button className="pill" type="button" onClick={() => onArchivePersonaItem(item._id)}>Archive</button> : null}
+                {item.status === "approved" && item.visibility === "custom" ? <button className="pill" type="button" onClick={() => onGrantMatchingToCircle(item._id)}>Share matching with my circle</button> : null}
+              </div>
             )) : <span className="tag">Nothing added yet</span>}
           </div>
           <div className="row">
@@ -511,17 +572,26 @@ export function DesignScreen({
 export function MyCardScreen({
   profile,
   xp,
+  awardedBadges,
   onShare,
 }: {
   profile: Profile;
   xp: number;
+  awardedBadges: string[];
   onShare: () => void;
 }) {
   const level = Math.min(5, Math.floor(xp / 300) + 1);
   const levelNames = ["Newcomer", "Connector", "Networker", "Super Connector", "Circle Legend"];
   const nextQuest = profile.photo ? "Share your card" : "Add a profile picture";
   const progress = level >= 5 ? 100 : (xp % 300) / 3;
-  const badges = ["First card", "Face of the brand", "Brand mark", "Signature style", "Circle founder", "First share"];
+  const badges = [
+    ["first_card", "First card"],
+    ["face_of_brand", "Face of the brand"],
+    ["brand_mark", "Brand mark"],
+    ["signature_style", "Signature style"],
+    ["circle_founder", "Circle founder"],
+    ["first_share", "First share"],
+  ] as const;
 
   return (
     <>
@@ -544,9 +614,12 @@ export function MyCardScreen({
           <span><small>Next quest</small>{nextQuest}</span><em>+100 XP</em>
         </button>
       </div>
-      <h2>Badges <span className="tag">1 of 12</span></h2>
+      <h2>Badges <span className="tag">{awardedBadges.length} of 12</span></h2>
       <div className="bdg">
-        {badges.map((badge, index) => <div className={index ? "lk2" : ""} key={badge}><i>{index ? "✧" : "✦"}</i>{badge}</div>)}
+        {badges.map(([id, label]) => {
+          const earned = awardedBadges.includes(id);
+          return <div className={earned ? "" : "lk2"} key={id}><i>{earned ? "✦" : "✧"}</i>{label}</div>;
+        })}
       </div>
       <button className="share" type="button" onClick={onShare}><Icon name="share" size={20} />Share</button>
     </>
@@ -564,7 +637,7 @@ export function ContactsScreen({
   query: string;
   onQuery: (query: string) => void;
   onScan: () => void;
-  onSelect: (name: string) => void;
+  onSelect: (contactId: Id<"contacts">) => void;
 }) {
   const visible = contacts.filter((contact) =>
     `${contact.name} ${contact.title} ${contact.company}`.toLowerCase().includes(query.toLowerCase()),
@@ -576,7 +649,7 @@ export function ContactsScreen({
       <div className="fl"><button className="pill on" type="button">All</button><button className="pill" type="button">Scanned</button></div>
       <div className="lst">
         {visible.length ? visible.map((contact) => (
-          <button className="ct contact-button" type="button" key={contact.name} onClick={() => onSelect(contact.name)}>
+          <button className="ct contact-button" type="button" key={contact.id} onClick={() => onSelect(contact.id)}>
             <Avatar name={contact.name} photo={contact.photo || undefined} size={56} />
             <div className="m"><b style={{ fontSize: 17 }}>{contact.name}</b><div className="tag">{[contact.title, contact.company].filter(Boolean).join(" at ") || contact.source}</div></div>
             <div className="contact-date"><div className="tag">{contact.when}</div><span className="dt" /></div>
@@ -595,19 +668,24 @@ export function ContactsScreen({
 
 export function ContactDetailScreen({
   contact,
+  introNetwork,
   onBack,
   onViewCard,
   onAskIntro,
   onTag,
   onNote,
+  onMet,
 }: {
   contact: Contact;
+  introNetwork: { status: "not_member" } | { status: "ok"; members: { userId: Id<"users">; fullName: string; jobTitle?: string; company?: string }[] } | undefined;
   onBack: () => void;
   onViewCard: () => void;
-  onAskIntro: () => void;
+  onAskIntro: (targetUserId: Id<"users">) => void;
   onTag: () => void;
   onNote: () => void;
+  onMet: () => void;
 }) {
+  const [showIntroTargets, setShowIntroTargets] = useState(false);
   return (
     <>
       <div className="cv">
@@ -620,6 +698,9 @@ export function ContactDetailScreen({
         {contact.company ? <div className="plg"><b>{contact.company[0].toUpperCase()}</b></div> : null}
       </div>
       <h1 className="contact-name">{contact.name}</h1>
+      {contact.source === "introduced" && contact.introducedByName ? (
+        <div className="tag introduced-by">Introduced by {contact.introducedByName}</div>
+      ) : null}
       {contact.title || contact.company ? (
         <div className="pt contact-role">{contact.title}{contact.title && contact.company ? <span> at </span> : null}{contact.company}</div>
       ) : null}
@@ -641,6 +722,7 @@ export function ContactDetailScreen({
         <span className="ic"><Icon name="calendar" size={18} />{contact.when}</span>
         {contact.met ? <span className="ic"><Icon name="pin" size={18} />{contact.met}</span> : null}
       </div>
+      <button className="lk contact-met-edit" type="button" onClick={onMet}>{contact.met ? "Edit where we met" : "Add where we met"}</button>
       <button className="btn g s contact-view-card" type="button" onClick={onViewCard}>View card</button>
       {contact.email || contact.phone ? (
         <div className="lst contact-fields">
@@ -649,10 +731,27 @@ export function ContactDetailScreen({
         </div>
       ) : null}
       <div className="bb">
-        <button className="btn" type="button" onClick={onAskIntro}>{contact.introRequested ? "Request sent" : "Ask for intros"}</button>
+        {contact.canRequestIntros ? (
+          <button className="btn" type="button" disabled={contact.introRequested} onClick={() => setShowIntroTargets((open) => !open)}>{contact.introRequested ? "Request sent" : "Ask for intros"}</button>
+        ) : null}
         <button className="btn g" type="button" onClick={onTag}>Add tag</button>
         <button className="btn g" type="button" onClick={onNote}>Add note</button>
       </div>
+      {showIntroTargets ? (
+        <div className="card intro-target-list">
+          <b>Ask {contact.name} to introduce you to</b>
+          {introNetwork === undefined ? (
+            <div className="intro-network-loading" aria-label="Loading circle members" aria-busy="true"><i /><i /><i /></div>
+          ) : introNetwork.status === "not_member" ? (
+            <p className="tag">You can ask for introductions through people you&apos;ve exchanged cards with.</p>
+          ) : introNetwork.members.length ? introNetwork.members.map((target) => (
+            <button className="ct" type="button" key={target.userId} onClick={() => { onAskIntro(target.userId); setShowIntroTargets(false); }}>
+              <div className="m"><b>{target.fullName}</b><div className="tag">{[target.jobTitle, target.company].filter(Boolean).join(" at ") || "In their circle"}</div></div>
+              <span className="dt" />
+            </button>
+          )) : <p className="tag">There is no one else in this circle to introduce you to yet.</p>}
+        </div>
+      ) : null}
     </>
   );
 }
@@ -664,6 +763,7 @@ export function ContactCardScreen({ contact, onBack }: { contact: Contact; onBac
       title: contact.title,
       company: contact.company,
       headline: "",
+      publicUrl: contact.publicUrl,
       email: contact.email,
       phone: contact.phone,
       photo: contact.photo,
@@ -675,10 +775,8 @@ export function ContactCardScreen({ contact, onBack }: { contact: Contact; onBac
       squarePhoto: false,
       art: 5,
       circle: "",
-      wants: [],
-      haves: [],
       fields: [],
-      qrOnBack: true,
+      qrOnBack: Boolean(contact.publicUrl),
       includeMeetingPlace: true,
     },
   };
@@ -701,18 +799,19 @@ export function ContactEntrySheet({
   onSave,
   onDismiss,
 }: {
-  kind: "tag" | "note";
+  kind: "tag" | "note" | "met";
   value: string;
   onChange: (value: string) => void;
   onSave: () => void;
   onDismiss: () => void;
 }) {
   const isTag = kind === "tag";
+  const title = kind === "met" ? "where we met" : isTag ? "tag" : "note";
   return (
     <div className="sheet" onClick={(event) => event.target === event.currentTarget && onDismiss()}>
       <div>
-        <h1 className="entry-title">Add a <i>{isTag ? "tag" : "note"}</i></h1>
-        <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={isTag ? "Investor, Friend, Follow up" : "What did you talk about?"} autoFocus />
+        <h1 className="entry-title">{kind === "met" ? "Edit" : "Add a"} <i>{title}</i></h1>
+        <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={isTag ? "Investor, Friend, Follow up" : kind === "met" ? "Coffee shop, conference, city…" : "What did you talk about?"} autoFocus />
         <button className="btn" type="button" onClick={onSave}>Save</button>
       </div>
     </div>
@@ -742,44 +841,245 @@ export function DeleteAccountSheet({
   );
 }
 
-export function ScanScreen({ profile, onScan }: { profile: Profile; onScan: () => void }) {
+export function DeleteCardSheet({
+  busy,
+  onConfirm,
+  onDismiss,
+}: {
+  busy: boolean;
+  onConfirm: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="sheet" onClick={(event) => event.target === event.currentTarget && !busy && onDismiss()}>
+      <div className="sp account-delete-sheet" role="alertdialog" aria-modal="true" aria-labelledby="delete-card-title">
+        <h2 id="delete-card-title">Delete your card?</h2>
+        <p>This removes your published card and its uploaded images. Your account and contacts stay saved.</p>
+        <button className="btn g s" type="button" onClick={onDismiss} disabled={busy}>Keep my card</button>
+        <button className="btn g s delete-account-confirm" type="button" onClick={onConfirm} disabled={busy}>
+          {busy ? "Deleting card…" : "Delete card"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function ShareLinkSheet({ url, onDismiss }: { url: string; onDismiss: () => void }) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [message, setMessage] = useState("");
+
+  async function copyLink() {
+    try {
+      if (!navigator.clipboard?.writeText || !window.isSecureContext) {
+        throw new Error("Clipboard access is unavailable.");
+      }
+      await navigator.clipboard.writeText(url);
+      setMessage("Link copied to clipboard.");
+      return;
+    } catch {
+      const input = inputRef.current;
+      input?.focus();
+      input?.select();
+      try {
+        if (document.execCommand("copy")) {
+          setMessage("Link copied to clipboard.");
+          return;
+        }
+      } catch {
+        // The selected link below remains available for manual copying.
+      }
+      setMessage("The link is selected. Copy it manually if clipboard access is blocked.");
+    }
+  }
+
+  async function shareLink() {
+    if (!navigator.share) {
+      setMessage("Use Copy link to share your card.");
+      return;
+    }
+    try {
+      await navigator.share({ title: "My Harmoni card", url });
+    } catch (error) {
+      if (error instanceof Error && error.name !== "AbortError") {
+        setMessage("Sharing was unavailable. Copy the link instead.");
+      }
+    }
+  }
+
+  return (
+    <div className="sheet" onClick={(event) => event.target === event.currentTarget && onDismiss()}>
+      <div className="sp" role="dialog" aria-modal="true" aria-labelledby="share-link-title">
+        <h2 id="share-link-title">Share your card</h2>
+        <p>Anyone with this link can view your published card.</p>
+        <input
+          ref={inputRef}
+          aria-label="Public card link"
+          value={url}
+          readOnly
+          onFocus={(event) => event.currentTarget.select()}
+          onClick={(event) => event.currentTarget.select()}
+        />
+        {message ? <p role="status">{message}</p> : null}
+        <button className="btn g s" type="button" onClick={() => void copyLink()}>Copy link</button>
+        <button className="lk" type="button" onClick={() => void shareLink()}>More sharing options</button>
+        <button className="lk" type="button" onClick={onDismiss}>Close</button>
+      </div>
+    </div>
+  );
+}
+
+type BarcodeDetectorLike = { detect: (video: HTMLVideoElement) => Promise<Array<{ rawValue: string }>> };
+
+type BarcodeDetectorConstructor = new (options: { formats: string[] }) => BarcodeDetectorLike;
+
+export function ScanScreen({ onScan }: { onScan: (link: string) => void }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const callbackRef = useRef(onScan);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraError, setCameraError] = useState("");
+  const [pastedLink, setPastedLink] = useState("");
+  const [scanning, setScanning] = useState(false);
+
+  useEffect(() => {
+    callbackRef.current = onScan;
+  }, [onScan]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!cameraStream || !video) return;
+    const activeVideo: HTMLVideoElement = video;
+    let active = true;
+    let animationFrame = 0;
+    streamRef.current = cameraStream;
+    activeVideo.srcObject = cameraStream;
+    void activeVideo.play();
+    const BrowserBarcodeDetector = (window as unknown as { BarcodeDetector?: BarcodeDetectorConstructor }).BarcodeDetector;
+    let detector: BarcodeDetectorLike | null = null;
+    try {
+      if (BrowserBarcodeDetector) detector = new BrowserBarcodeDetector({ formats: ["qr_code"] });
+    } catch {
+      detector = null;
+    }
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+
+    async function detectFrame() {
+      if (!active) return;
+      if (activeVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        try {
+          if (detector) {
+            const results = await detector.detect(activeVideo);
+            const value = results.find((item) => item.rawValue)?.rawValue;
+            if (value) {
+              active = false;
+              streamRef.current?.getTracks().forEach((track) => track.stop());
+              setScanning(false);
+              setCameraStream(null);
+              callbackRef.current(value);
+              return;
+            }
+          } else if (context) {
+            canvas.width = activeVideo.videoWidth;
+            canvas.height = activeVideo.videoHeight;
+            context.drawImage(activeVideo, 0, 0, canvas.width, canvas.height);
+            const frame = context.getImageData(0, 0, canvas.width, canvas.height);
+            const result = jsQR(frame.data, frame.width, frame.height, { inversionAttempts: "attemptBoth" });
+            if (result?.data) {
+              active = false;
+              streamRef.current?.getTracks().forEach((track) => track.stop());
+              setScanning(false);
+              setCameraStream(null);
+              callbackRef.current(result.data);
+              return;
+            }
+          }
+        } catch {
+          detector = null;
+        }
+      }
+      animationFrame = window.requestAnimationFrame(() => void detectFrame());
+    }
+    animationFrame = window.requestAnimationFrame(() => void detectFrame());
+    return () => {
+      active = false;
+      window.cancelAnimationFrame(animationFrame);
+      cameraStream.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+      activeVideo.srcObject = null;
+    };
+  }, [cameraStream]);
+
+  async function startCamera() {
+    setCameraError("");
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError("Camera scanning is not available here. Paste a card link below.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+      setCameraStream(stream);
+      setScanning(true);
+    } catch {
+      setCameraError("Camera access was unavailable. Paste a card link below.");
+    }
+  }
+
+  function submitLink(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const value = pastedLink.trim();
+    if (value) callbackRef.current(value);
+  }
+
   return (
     <>
       <h1 className="scan-title">Scan a <i>card</i></h1>
-      <p>Point your camera at a Harmoni QR code. You get their card, and they get yours.</p>
-      <div className="vf">
+      <p>Point your camera at a Harmoni QR code, or paste a card link.</p>
+      <div className={`vf${scanning ? " scanning" : ""}`}>
         <i /><i /><i /><i />
-        <div className="vt"><QrCode seed="scan" /></div>
-        <div className="sl" />
+        <video ref={videoRef} className="scan-video" playsInline muted aria-label="Live QR scanner" />
+        {scanning ? <div className="sl" /> : null}
       </div>
-      <p className="c">Live camera scanning arrives with the backend.</p>
-      <button className="btn" type="button" onClick={onScan}>Scan {profile.name.split(" ")[0]}&apos;s QR (demo)</button>
+      <button className="btn" type="button" onClick={() => void startCamera()}>{scanning ? "Camera scanning…" : "Start camera scanning"}</button>
+      {cameraError ? <p className="auth-error" role="alert">{cameraError}</p> : null}
+      <form className="scan-link-form" onSubmit={submitLink}>
+        <label className="f"><span>Paste a card link</span><input type="url" value={pastedLink} onChange={(event) => setPastedLink(event.target.value)} placeholder="https://…/c/name" /></label>
+        <button className="btn g s" type="submit" disabled={!pastedLink.trim()}>Open card</button>
+      </form>
     </>
   );
 }
 
-const DEMO_NETWORK = [
-  ["Maya Chen", "Seed investor", "Backs early stage SaaS and consumer apps"],
-  ["Dev Patel", "Startup counsel", "Handles incorporation and fundraising paperwork"],
-  ["Sofia Rossi", "Growth lead", "Helps founders land their first 100 customers"],
-] as const;
-
 export function CircleScreen({
   profile,
   contacts,
-  introductions,
+  circle,
+  exchangeRequests,
+  introRequests,
+  suggestions,
   onScan,
-  onAskIntro,
   onShare,
+  onRename,
+  onAcceptExchange,
+  onDeclineExchange,
+  onDecideIntro,
+  onDismissMatch,
 }: {
   profile: Profile;
   contacts: Contact[];
-  introductions: Record<string, boolean>;
+  circle: { name: string; members: { userId: Id<"users">; fullName: string; jobTitle?: string; company?: string; photoUrl: string | null; isMe?: boolean }[] } | null;
+  exchangeRequests: { _id: Id<"exchanges">; card: { fullName: string; jobTitle?: string; company?: string; photoUrl: string | null }; metLocation?: string }[];
+  introRequests: { _id: Id<"introRequests">; requester: { fullName: string }; target: { fullName: string } }[];
+  suggestions: { _id: Id<"matchSuggestions">; targetUserId: Id<"users">; targetName: string; reason: string; score: number }[];
   onScan: () => void;
-  onAskIntro: (name: string) => void;
   onShare: () => void;
+  onRename: () => void;
+  onAcceptExchange: (exchangeId: Id<"exchanges">) => void;
+  onDeclineExchange: (exchangeId: Id<"exchanges">) => void;
+  onDecideIntro: (requestId: Id<"introRequests">, decision: "approve" | "decline") => void;
+  onDismissMatch: (suggestionId: Id<"matchSuggestions">) => void;
 }) {
-  if (!contacts.length) {
+  if (!contacts.length && !exchangeRequests.length && !introRequests.length && !suggestions.length) {
     return (
       <>
         <div className="orb2">
@@ -789,46 +1089,99 @@ export function CircleScreen({
         </div>
         <h1 className="circle-title">Your <i>circle</i></h1>
         <p className="c">It starts with your first card exchange. Everyone you meet joins your circle and opens their network to you.</p>
+        <button className="lk" type="button" onClick={onRename}>Edit circle name</button>
         <button className="btn" type="button" onClick={onScan}>Open the scanner</button>
       </>
     );
   }
 
-  const host = contacts[0];
   return (
     <>
-      <h1 className="circle-title">{host.name.split(" ")[0]}&apos;s <i>circle</i></h1>
-      <p>Ask {host.name.split(" ")[0]} for an introduction. They approve first, then the person sees your card.</p>
-      {DEMO_NETWORK.map(([name, role, description]) => {
-        const requested = introductions[name];
-        const search = `${role} ${description}`.toLowerCase();
-        const matched = profile.wants.some((want) => search.includes(want.toLowerCase().replace(/s$/, "")));
-        return (
-          <div className="card" key={name}>
-            <div className="row">
-              <Avatar name={name} size={52} />
-              <div className="member-main"><b className="member-name">{name}</b><div className="tag">{role}</div></div>
-              {matched ? <span className="ach match-badge">✦ Match</span> : null}
-            </div>
-            <p className="member-copy">{description}.</p>
-            {requested ? <span className="pill">Waiting for {host.name.split(" ")[0]} to approve</span> : (
-              <button className="btn s" type="button" onClick={() => onAskIntro(name)}>Ask {host.name.split(" ")[0]} for an intro</button>
-            )}
-          </div>
-        );
-      })}
+      <h1 className="circle-title">Your <i>circle</i></h1>
+      <p>People you exchange cards with appear here. Ask a connection for an introduction to someone in their circle.</p>
       <h2>Your circle</h2>
       <div className="card">
         <div className="row circle-summary">
-          <div><b>{profile.circle}</b><div className="tag">{DEMO_NETWORK.length + contacts.length + 1} people</div></div>
+          <div><b>{circle?.name || profile.circle || "My Circle"}</b><div className="tag">{circle?.members.length ?? contacts.length + 1} people</div></div>
           <div className="stk">
-            <Avatar name={host.name} size={36} />
-            {DEMO_NETWORK.map(([name]) => <Avatar key={name} name={name} size={36} />)}
+            <Avatar name={profile.name} photo={profile.photo || undefined} size={36} />
+            {contacts.map((contact) => <Avatar key={contact.id} name={contact.name} photo={contact.photo || undefined} size={36} />)}
           </div>
         </div>
-        <p className="circle-copy">{host.name.split(" ")[0]} joined automatically. Share your card with the next person you meet to grow it.</p>
+        <button className="lk" type="button" onClick={onRename}>Edit circle name</button>
+        <p className="circle-copy">Share your card with the next person you meet to grow your circle.</p>
         <button className="btn g s" type="button" onClick={onShare}>Share my card</button>
       </div>
+      {circle ? circle.members.filter((member) => !member.isMe).map((member) => (
+        <div className="card" key={member.userId}>
+          <div className="row">
+            <Avatar name={member.fullName} photo={member.photoUrl || undefined} size={52} />
+            <div className="member-main"><b className="member-name">{member.fullName}</b><div className="tag">{member.jobTitle || member.company || "Connection"}</div></div>
+          </div>
+        </div>
+      )) : contacts.map((contact) => (
+        <div className="card" key={contact.id}>
+          <div className="row"><Avatar name={contact.name} photo={contact.photo || undefined} size={52} /><div className="member-main"><b className="member-name">{contact.name}</b><div className="tag">{contact.title || contact.company || "Connection"}</div></div></div>
+        </div>
+      ))}
+      {exchangeRequests.length ? <><h2>Card exchange requests</h2>{exchangeRequests.map((request) => (
+        <div className="card" key={request._id}>
+          <div className="row"><Avatar name={request.card.fullName} photo={request.card.photoUrl || undefined} size={48} /><div className="member-main"><b>{request.card.fullName}</b><div className="tag">{[request.card.jobTitle, request.card.company].filter(Boolean).join(" at ") || "Wants to exchange cards"}</div></div></div>
+          {request.metLocation ? <div className="tag">Met at {request.metLocation}</div> : null}
+          <div className="row"><button className="btn s" type="button" onClick={() => onAcceptExchange(request._id)}>Accept</button><button className="btn g s" type="button" onClick={() => onDeclineExchange(request._id)}>Decline</button></div>
+        </div>
+      ))}</> : null}
+      {introRequests.length ? <><h2>Intro requests</h2>{introRequests.map((request) => (
+        <div className="card" key={request._id}>
+          <p>{request.requester.fullName} asked for an introduction to {request.target.fullName}.</p>
+          <div className="row"><button className="btn s" type="button" onClick={() => onDecideIntro(request._id, "approve")}>Make the introduction</button><button className="btn g s" type="button" onClick={() => onDecideIntro(request._id, "decline")}>Decline</button></div>
+        </div>
+      ))}</> : null}
+      {suggestions.length ? <><h2>Potential matches</h2>{suggestions.map((suggestion) => (
+        <div className="card match-suggestion" key={suggestion._id}>
+          <div className="row"><Avatar name={suggestion.targetName} size={44} /><div className="member-main"><b>{suggestion.targetName}</b><div className="tag">Suggested connection</div></div></div>
+          <p>{suggestion.reason}</p>
+          <button className="lk" type="button" onClick={() => onDismissMatch(suggestion._id)}>Dismiss</button>
+        </div>
+      ))}</> : null}
+    </>
+  );
+}
+
+export function CircleNameSheet({ value, onChange, onSave, onDismiss }: {
+  value: string;
+  onChange: (value: string) => void;
+  onSave: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="sheet" onClick={(event) => event.target === event.currentTarget && onDismiss()}>
+      <div>
+        <h1 className="entry-title">Name your <i>circle</i></h1>
+        <input value={value} onChange={(event) => onChange(event.target.value)} maxLength={50} autoFocus />
+        <button className="btn" type="button" onClick={onSave} disabled={!value.trim()}>Save circle name</button>
+      </div>
+    </div>
+  );
+}
+
+export function AccessLogScreen({ rows, onBack, onRevoke }: {
+  rows: { _id: Id<"accessLog">; viewerName: string; itemText: string; purpose: string; at: number; grantId?: Id<"personaGrants"> }[];
+  onBack: () => void;
+  onRevoke: (grantId: Id<"personaGrants">) => void;
+}) {
+  return (
+    <>
+      <div className="hd"><button className="lk" type="button" onClick={onBack}>Back</button><b className="ed">Who has seen my context</b><span className="header-spacer" /></div>
+      <p>Approved context is only shown for the purpose and people you allowed.</p>
+      {rows.length ? rows.map((row) => (
+        <div className="card access-log-row" key={row._id}>
+          <b>{row.viewerName}</b>
+          <div>{row.itemText}</div>
+          <div className="tag">{row.purpose} · {new Date(row.at).toLocaleString()}</div>
+          {row.grantId ? <button className="lk" type="button" onClick={() => onRevoke(row.grantId!)}>Revoke access</button> : null}
+        </div>
+      )) : <div className="card"><b>No one has viewed your approved context yet.</b><div className="tag">We will list the viewer, item, purpose, and time here.</div></div>}
     </>
   );
 }

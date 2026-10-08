@@ -1,17 +1,10 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { requireCurrentUser } from "./lib/auth";
 import { requireDemoUser } from "./lib/demoAuthHelper";
 import { normalizeSlug } from "./lib/slugs";
-
-const linkValidator = v.object({
-  label: v.string(),
-  url: v.string(),
-  kind: v.string(),
-  visible: v.boolean(),
-  order: v.number(),
-});
+import { awardProgress } from "./lib/progress";
 
 const fieldValidator = v.object({
   label: v.string(),
@@ -30,10 +23,43 @@ const themeValidator = v.object({
   textColor: v.string(),
 });
 
+async function uniqueSlug(
+  ctx: MutationCtx,
+  slugSource: string,
+  ownerId: Id<"users">,
+  exceptCardId?: Id<"cards">,
+) {
+  const base = normalizeSlug(slugSource) || "card";
+  let candidate = base;
+  let suffix = 1;
+  while (true) {
+    const existing = await ctx.db
+      .query("cards")
+      .withIndex("by_slug", (q) => q.eq("slug", candidate))
+      .unique();
+    if (!existing || existing._id === exceptCardId) return candidate;
+    candidate = `${base}-${String(ownerId).slice(-6)}${suffix === 1 ? "" : `-${suffix}`}`;
+    suffix += 1;
+  }
+}
+
+async function requireOwnedUpload(
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  storageId: Id<"_storage"> | undefined,
+  currentStorageId: Id<"_storage"> | undefined,
+) {
+  if (!storageId || storageId === currentStorageId) return;
+  const upload = await ctx.db.query("cardUploads")
+    .withIndex("by_storage", (q) => q.eq("storageId", storageId))
+    .unique();
+  if (!upload || upload.ownerId !== userId) throw new Error("This image upload does not belong to your account.");
+}
+
 export const listMine = query({
-  args: {},
-  handler: async (ctx) => {
-    const user = await requireCurrentUser(ctx);
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await requireDemoUser(ctx, sessionToken);
     return ctx.db
       .query("cards")
       .withIndex("by_owner", (q) => q.eq("ownerId", user._id))
@@ -43,9 +69,9 @@ export const listMine = query({
 });
 
 export const getPrimaryMine = query({
-  args: {},
-  handler: async (ctx) => {
-    const user = await requireCurrentUser(ctx);
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await requireDemoUser(ctx, sessionToken);
     return ctx.db
       .query("cards")
       .withIndex("by_owner_primary", (q) =>
@@ -73,7 +99,31 @@ export const getPrimaryDemo = query({
       card.logoStorageId ? ctx.storage.getUrl(card.logoStorageId) : null,
     ]);
 
-    return { ...card, photoUrl, coverUrl, logoUrl };
+    return {
+      _id: card._id,
+      slug: card.slug,
+      fullName: card.fullName,
+      jobTitle: card.jobTitle,
+      company: card.company,
+      headline: card.headline,
+      photoStorageId: card.photoStorageId,
+      coverStorageId: card.coverStorageId,
+      logoStorageId: card.logoStorageId,
+      logoMode: card.logoMode,
+      squarePhoto: card.squarePhoto,
+      qrOnBack: card.qrOnBack,
+      includeMeetingPlace: card.includeMeetingPlace,
+      profileVersion: card.profileVersion,
+      fields: card.fields,
+      theme: card.theme,
+      status: card.status,
+      isPrimary: card.isPrimary,
+      createdAt: card.createdAt,
+      updatedAt: card.updatedAt,
+      photoUrl,
+      coverUrl,
+      logoUrl,
+    };
   },
 });
 
@@ -94,18 +144,20 @@ export const getPublicBySlug = query({
       card.logoStorageId ? ctx.storage.getUrl(card.logoStorageId) : null,
     ]);
 
-    const { ownerId, photoStorageId, coverStorageId, logoStorageId, ...publicCard } = card;
-    void ownerId;
-    void photoStorageId;
-    void coverStorageId;
-    void logoStorageId;
-
     return {
-      ...publicCard,
+      slug: card.slug,
+      fullName: card.fullName,
+      jobTitle: card.jobTitle,
+      company: card.company,
+      headline: card.headline,
+      logoMode: card.logoMode,
+      squarePhoto: card.squarePhoto,
+      qrOnBack: card.qrOnBack,
+      includeMeetingPlace: card.includeMeetingPlace,
+      theme: card.theme,
       photoUrl,
       coverUrl,
       logoUrl,
-      links: card.links.filter((link) => link.visible),
       fields: card.fields.filter((field) => field.visible),
     };
   },
@@ -113,22 +165,15 @@ export const getPublicBySlug = query({
 
 export const create = mutation({
   args: {
-    slug: v.string(),
+    sessionToken: v.string(),
     fullName: v.string(),
     jobTitle: v.optional(v.string()),
     company: v.optional(v.string()),
     headline: v.optional(v.string()),
   },
-  handler: async (ctx, args) => {
-    const user = await requireCurrentUser(ctx);
-    const slug = normalizeSlug(args.slug);
-    if (!slug) throw new Error("Enter a valid public card link.");
-
-    const existingSlug = await ctx.db
-      .query("cards")
-      .withIndex("by_slug", (q) => q.eq("slug", slug))
-      .unique();
-    if (existingSlug) throw new Error("That card link is already in use.");
+  handler: async (ctx, { sessionToken, ...args }) => {
+    const user = await requireDemoUser(ctx, sessionToken);
+    const slug = await uniqueSlug(ctx, user.demoUsername ?? args.fullName, user._id);
 
     const cards = await ctx.db
       .query("cards")
@@ -143,7 +188,6 @@ export const create = mutation({
       ...(args.jobTitle ? { jobTitle: args.jobTitle.trim() } : {}),
       ...(args.company ? { company: args.company.trim() } : {}),
       ...(args.headline ? { headline: args.headline.trim() } : {}),
-      links: [],
       fields: [],
       theme: {
         style: "classic",
@@ -166,20 +210,13 @@ export const saveDemoProfile = mutation({
     jobTitle: v.optional(v.string()),
     company: v.optional(v.string()),
     headline: v.optional(v.string()),
-    email: v.optional(v.string()),
-    phone: v.optional(v.string()),
-    website: v.optional(v.string()),
     photoStorageId: v.optional(v.union(v.id("_storage"), v.null())),
     coverStorageId: v.optional(v.union(v.id("_storage"), v.null())),
     logoStorageId: v.optional(v.union(v.id("_storage"), v.null())),
     logoMode: v.optional(v.union(v.literal("auto"), v.literal("image"), v.null())),
     squarePhoto: v.optional(v.boolean()),
-    circle: v.optional(v.string()),
-    wants: v.optional(v.array(v.string())),
-    haves: v.optional(v.array(v.string())),
     qrOnBack: v.optional(v.boolean()),
     includeMeetingPlace: v.optional(v.boolean()),
-    links: v.optional(v.array(linkValidator)),
     fields: v.optional(v.array(fieldValidator)),
     theme: v.optional(themeValidator),
     status: v.optional(
@@ -210,26 +247,24 @@ export const saveDemoProfile = mutation({
     const logoMode = args.logoMode === undefined
       ? existing?.logoMode
       : args.logoMode ?? undefined;
+    await Promise.all([
+      requireOwnedUpload(ctx, user._id, photoStorageId, existing?.photoStorageId),
+      requireOwnedUpload(ctx, user._id, coverStorageId, existing?.coverStorageId),
+      requireOwnedUpload(ctx, user._id, logoStorageId, existing?.logoStorageId),
+    ]);
     const profile = {
       fullName,
       jobTitle: args.jobTitle === undefined ? existing?.jobTitle : args.jobTitle.trim() || undefined,
       company: args.company === undefined ? existing?.company : args.company.trim() || undefined,
       headline: args.headline === undefined ? existing?.headline : args.headline.trim() || undefined,
-      email: args.email === undefined ? existing?.email : args.email.trim() || undefined,
-      phone: args.phone === undefined ? existing?.phone : args.phone.trim() || undefined,
-      website: args.website === undefined ? existing?.website : args.website.trim() || undefined,
       photoStorageId,
       coverStorageId,
       logoStorageId,
       logoMode,
       squarePhoto: args.squarePhoto ?? existing?.squarePhoto ?? false,
-      circle: args.circle === undefined ? existing?.circle : args.circle.trim() || undefined,
-      wants: args.wants ?? existing?.wants ?? [],
-      haves: args.haves ?? existing?.haves ?? [],
       qrOnBack: args.qrOnBack ?? existing?.qrOnBack ?? true,
       includeMeetingPlace: args.includeMeetingPlace ?? existing?.includeMeetingPlace ?? true,
       profileVersion: 1,
-      links: args.links ?? existing?.links ?? [],
       fields: args.fields ?? existing?.fields ?? [],
       theme: args.theme ?? existing?.theme ?? {
         style: "0",
@@ -242,23 +277,39 @@ export const saveDemoProfile = mutation({
     };
 
     await ctx.db.patch(user._id, { fullName, updatedAt: now });
+
     let cardId: Id<"cards">;
+    let cardSlug = "";
     if (existing) {
-      await ctx.db.patch(existing._id, profile);
+      const slug = await uniqueSlug(ctx, existing.slug, user._id, existing._id);
+      cardSlug = slug;
+      await ctx.db.patch(existing._id, {
+        fullName: profile.fullName,
+        ...(profile.jobTitle ? { jobTitle: profile.jobTitle } : { jobTitle: undefined }),
+        ...(profile.company ? { company: profile.company } : { company: undefined }),
+        ...(profile.headline ? { headline: profile.headline } : { headline: undefined }),
+        photoStorageId: profile.photoStorageId,
+        coverStorageId: profile.coverStorageId,
+        logoStorageId: profile.logoStorageId,
+        logoMode: profile.logoMode,
+        squarePhoto: profile.squarePhoto,
+        qrOnBack: profile.qrOnBack,
+        includeMeetingPlace: profile.includeMeetingPlace,
+        profileVersion: profile.profileVersion,
+        fields: profile.fields,
+        theme: profile.theme,
+        status: profile.status,
+        slug,
+        updatedAt: profile.updatedAt,
+      });
       cardId = existing._id;
     } else {
       const cards = await ctx.db
         .query("cards")
         .withIndex("by_owner", (q) => q.eq("ownerId", user._id))
         .collect();
-      let slug = normalizeSlug(user.demoUsername ?? fullName);
-      const slugOwner = await ctx.db
-        .query("cards")
-        .withIndex("by_slug", (q) => q.eq("slug", slug))
-        .unique();
-      if (slugOwner && slugOwner.ownerId !== user._id) {
-        slug = normalizeSlug(`${slug}-${String(user._id).slice(-6)}`);
-      }
+      const slug = await uniqueSlug(ctx, user.demoUsername ?? fullName, user._id);
+      cardSlug = slug;
 
       cardId = await ctx.db.insert("cards", {
         ownerId: user._id,
@@ -267,21 +318,14 @@ export const saveDemoProfile = mutation({
         ...(profile.jobTitle ? { jobTitle: profile.jobTitle } : {}),
         ...(profile.company ? { company: profile.company } : {}),
         ...(profile.headline ? { headline: profile.headline } : {}),
-        ...(profile.email ? { email: profile.email } : {}),
-        ...(profile.phone ? { phone: profile.phone } : {}),
-        ...(profile.website ? { website: profile.website } : {}),
         ...(profile.photoStorageId ? { photoStorageId: profile.photoStorageId } : {}),
         ...(profile.coverStorageId ? { coverStorageId: profile.coverStorageId } : {}),
         ...(profile.logoStorageId ? { logoStorageId: profile.logoStorageId } : {}),
         ...(profile.logoMode ? { logoMode: profile.logoMode } : {}),
         squarePhoto: profile.squarePhoto,
-        ...(profile.circle ? { circle: profile.circle } : {}),
-        wants: profile.wants,
-        haves: profile.haves,
         qrOnBack: profile.qrOnBack,
         includeMeetingPlace: profile.includeMeetingPlace,
         profileVersion: profile.profileVersion,
-        links: profile.links,
         fields: profile.fields,
         theme: profile.theme,
         status: profile.status,
@@ -301,9 +345,23 @@ export const saveDemoProfile = mutation({
         existing.coverStorageId,
         existing.logoStorageId,
       ].filter((id): id is Id<"_storage"> => id !== undefined);
+      const removedIds = [...previousIds].filter((id) => !currentIds.has(id));
       await Promise.all(
-        [...previousIds].filter((id) => !currentIds.has(id)).map((id) => ctx.storage.delete(id)),
+        removedIds.map(async (id) => {
+          const upload = await ctx.db.query("cardUploads")
+            .withIndex("by_storage", (q) => q.eq("storageId", id))
+            .unique();
+          if (upload?.ownerId === user._id) await ctx.db.delete(upload._id);
+          await ctx.storage.delete(id);
+        }),
       );
+    }
+
+    if (!existing) await awardProgress(ctx, user._id, 100, "first_card");
+    if (photoStorageId && !existing?.photoStorageId) await awardProgress(ctx, user._id, 100, "face_of_brand");
+    if (logoMode && !existing?.logoMode) await awardProgress(ctx, user._id, 50, "brand_mark");
+    if (profile.status === "published" && existing?.status !== "published") {
+      await awardProgress(ctx, user._id, 150, "circle_founder");
     }
 
     const [photoUrl, coverUrl, logoUrl] = await Promise.all([
@@ -311,60 +369,45 @@ export const saveDemoProfile = mutation({
       coverStorageId ? ctx.storage.getUrl(coverStorageId) : null,
       logoStorageId ? ctx.storage.getUrl(logoStorageId) : null,
     ]);
-    return { cardId, photoUrl, coverUrl, logoUrl };
+    return { cardId, slug: cardSlug, photoUrl, coverUrl, logoUrl };
   },
 });
 
 export const update = mutation({
   args: {
+    sessionToken: v.string(),
     cardId: v.id("cards"),
-    slug: v.optional(v.string()),
     fullName: v.optional(v.string()),
     jobTitle: v.optional(v.string()),
     company: v.optional(v.string()),
     headline: v.optional(v.string()),
-    email: v.optional(v.string()),
-    phone: v.optional(v.string()),
-    website: v.optional(v.string()),
     photoStorageId: v.optional(v.id("_storage")),
     coverStorageId: v.optional(v.id("_storage")),
-    links: v.optional(v.array(linkValidator)),
     fields: v.optional(v.array(fieldValidator)),
     theme: v.optional(themeValidator),
     status: v.optional(
       v.union(v.literal("draft"), v.literal("published"), v.literal("archived")),
     ),
   },
-  handler: async (ctx, { cardId, ...updates }) => {
-    const user = await requireCurrentUser(ctx);
+  handler: async (ctx, { sessionToken, cardId, ...updates }) => {
+    const user = await requireDemoUser(ctx, sessionToken);
     const card = await ctx.db.get(cardId);
     if (!card || card.ownerId !== user._id) throw new Error("Card not found.");
+    await Promise.all([
+      requireOwnedUpload(ctx, user._id, updates.photoStorageId, card.photoStorageId),
+      requireOwnedUpload(ctx, user._id, updates.coverStorageId, card.coverStorageId),
+    ]);
 
-    const patch: Record<string, unknown> = { updatedAt: Date.now() };
-    if (updates.slug !== undefined) {
-      const slug = normalizeSlug(updates.slug);
-      if (!slug) throw new Error("Enter a valid public card link.");
-      const existing = await ctx.db
-        .query("cards")
-        .withIndex("by_slug", (q) => q.eq("slug", slug))
-        .unique();
-      if (existing && existing._id !== cardId) {
-        throw new Error("That card link is already in use.");
-      }
-      patch.slug = slug;
-    }
+    const slug = await uniqueSlug(ctx, card.slug, user._id, cardId);
+    const patch: Record<string, unknown> = { updatedAt: Date.now(), slug };
 
     for (const key of [
       "fullName",
       "jobTitle",
       "company",
       "headline",
-      "email",
-      "phone",
-      "website",
       "photoStorageId",
       "coverStorageId",
-      "links",
       "fields",
       "theme",
       "status",
@@ -379,9 +422,9 @@ export const update = mutation({
 });
 
 export const setPrimary = mutation({
-  args: { cardId: v.id("cards") },
-  handler: async (ctx, { cardId }) => {
-    const user = await requireCurrentUser(ctx);
+  args: { sessionToken: v.string(), cardId: v.id("cards") },
+  handler: async (ctx, { sessionToken, cardId }) => {
+    const user = await requireDemoUser(ctx, sessionToken);
     const target = await ctx.db.get(cardId);
     if (!target || target.ownerId !== user._id) throw new Error("Card not found.");
 
@@ -400,12 +443,48 @@ export const setPrimary = mutation({
   },
 });
 
-export const generateImageUploadUrl = mutation({
-  args: {},
-  returns: v.string(),
-  handler: async (ctx) => {
-    await requireCurrentUser(ctx);
-    return ctx.storage.generateUploadUrl();
+export const recordShare = mutation({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await requireDemoUser(ctx, sessionToken);
+    const card = await ctx.db
+      .query("cards")
+      .withIndex("by_owner_primary", (q) => q.eq("ownerId", user._id).eq("isPrimary", true))
+      .first();
+    if (!card || card.status !== "published") throw new Error("Publish your card before sharing it.");
+    await awardProgress(ctx, user._id, 100, "first_share");
+    return card.slug;
+  },
+});
+
+export const deleteMine = mutation({
+  args: { sessionToken: v.string() },
+  handler: async (ctx, { sessionToken }) => {
+    const user = await requireDemoUser(ctx, sessionToken);
+    const cards = await ctx.db
+      .query("cards")
+      .withIndex("by_owner", (q) => q.eq("ownerId", user._id))
+      .collect();
+    const uploads = await ctx.db.query("cardUploads").withIndex("by_owner", (q) => q.eq("ownerId", user._id)).collect();
+    const linkedContacts = await Promise.all(cards.map((card) =>
+      ctx.db.query("contacts").withIndex("by_linked_card", (q) => q.eq("linkedCardId", card._id)).collect(),
+    ));
+    const externalContacts = new Map(linkedContacts.flat()
+      .filter((contact) => contact.ownerId !== user._id)
+      .map((contact) => [contact._id, contact]));
+    const storageIds = new Set<Id<"_storage">>(cards.flatMap((card) => [
+      card.photoStorageId,
+      card.coverStorageId,
+      card.logoStorageId,
+    ]).concat(uploads.map((upload) => upload.storageId)).filter((id): id is Id<"_storage"> => id !== undefined));
+    await Promise.all([
+      ...cards.map((card) => ctx.db.delete(card._id)),
+      ...uploads.map((upload) => ctx.db.delete(upload._id)),
+      ...[...externalContacts.values()].map((contact) =>
+        ctx.db.patch(contact._id, { linkedCardId: undefined, linkedUserId: undefined, updatedAt: Date.now() }),
+      ),
+      ...[...storageIds].map((id) => ctx.storage.delete(id)),
+    ]);
   },
 });
 
@@ -415,5 +494,23 @@ export const generateDemoImageUploadUrl = mutation({
   handler: async (ctx, { sessionToken }) => {
     await requireDemoUser(ctx, sessionToken);
     return ctx.storage.generateUploadUrl();
+  },
+});
+
+export const registerDemoImageUpload = mutation({
+  args: { sessionToken: v.string(), storageId: v.id("_storage") },
+  handler: async (ctx, { sessionToken, storageId }) => {
+    const user = await requireDemoUser(ctx, sessionToken);
+    const metadata = await ctx.storage.getMetadata(storageId);
+    if (!metadata) throw new Error("Uploaded image could not be found.");
+    const existing = await ctx.db.query("cardUploads")
+      .withIndex("by_storage", (q) => q.eq("storageId", storageId))
+      .unique();
+    if (existing) {
+      if (existing.ownerId !== user._id) throw new Error("This image upload does not belong to your account.");
+      return storageId;
+    }
+    await ctx.db.insert("cardUploads", { ownerId: user._id, storageId, createdAt: Date.now() });
+    return storageId;
   },
 });
