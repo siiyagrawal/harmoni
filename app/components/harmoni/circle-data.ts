@@ -197,7 +197,7 @@ const SAMPLE_CIRCLES: DemoCircle[] = [
     guestFields: ["purpose", "host", "topics", "memberCount"],
     available: true,
     published: true,
-    settings: { ...DEFAULT_SETTINGS, whoCanInvite: "members" },
+    settings: { ...DEFAULT_SETTINGS, whoCanInvite: "members", connectionApproval: "host-then-member" },
     requests: [],
     invitations: [],
     members: [],
@@ -382,7 +382,7 @@ const SAMPLE_CIRCLES: DemoCircle[] = [
     guestFields: ["purpose", "host", "topics", "memberCount"],
     available: true,
     published: true,
-    settings: DEFAULT_SETTINGS,
+    settings: { ...DEFAULT_SETTINGS, connectionApproval: "host-then-member" },
     requests: [
       { id: "rq1", name: "Ishaan Verma", persona: "Business", note: "Building a budgeting app; happy to review landing pages.", at: "2h ago", status: "pending" },
       { id: "rq2", name: "Meera Das", persona: "Business", note: "Product designer looking for weekend collaborators.", at: "Yesterday", status: "pending" },

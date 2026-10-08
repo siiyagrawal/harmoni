@@ -274,8 +274,10 @@ export function CircleDetailScreen({
   onShare,
   onHub,
   onLinkConsent,
+  spotlight,
 }: {
   circle: DemoCircle;
+  spotlight?: ReactNode;
   onBack: () => void;
   onJoin: () => void;
   onWithdraw: () => void;
@@ -374,6 +376,7 @@ export function CircleDetailScreen({
         <div className="p1-invite-topics">{circle.topics.map((topic) => <span key={topic}>{topic}</span>)}</div>
       </div>
       {statusCard()}
+      {spotlight}
       <div className="card p2-terms">
         <div><small>Host</small><b>{circle.host}</b></div>
         <div><small>Area</small><b>{circle.area}</b></div>
@@ -636,10 +639,12 @@ export function ManageCircleScreen({
   onShare,
   onLink,
   onHub,
+  onSpotlights,
   onToast,
 }: {
   circle: DemoCircle;
   demo: CircleDemo;
+  onSpotlights: () => void;
   section: ManageSection;
   onSection: (section: ManageSection) => void;
   onBack: () => void;
@@ -690,6 +695,7 @@ export function ManageCircleScreen({
         {circle.capacity ? <span className="p2-meter" aria-hidden="true"><i style={{ width: `${Math.min(100, (circle.memberCount / circle.capacity) * 100)}%` }} /></span> : null}
         <div className="p2-inline-row">
           {circle.published && !hubInactive ? <button className="pill" type="button" onClick={onShare}>Share entry · QR, link, code</button> : null}
+          {circle.published && !hubInactive ? <button className="pill" type="button" onClick={onSpotlights}>Manage Spotlights</button> : null}
           {circle.kind === "hub" ? <button className="pill" type="button" onClick={onHub}>Hub structure</button> : null}
         </div>
       </div>

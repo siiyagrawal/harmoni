@@ -34,7 +34,6 @@ import {
 import {
   GuestCirclePreviewScreen,
   JoinCodeScreen,
-  MatchesLandingScreen,
   NotificationsLandingScreen,
   PersonaHubScreen,
   PersonaOnboardingScreen,
@@ -64,6 +63,17 @@ import {
 } from "./entry-share-screens";
 import { EMPTY_CIRCLE_DRAFT, joinCodeToCircle, useCircleDemo } from "./circle-data";
 import { Icon } from "./ui";
+import { useConnectDemo, type DemoMatch } from "./connect-data";
+import {
+  ExpressInterestScreen,
+  HelpOfferScreen,
+  HelpRequestScreen,
+  MatchesHubScreen,
+  RequestReviewScreen,
+  type HelpTarget,
+  type PersonaOption,
+} from "./connect-screens";
+import { SpotlightAskScreen, SpotlightCard, SpotlightManagerScreen, type SpotlightTab } from "./spotlight-screens";
 import {
   INITIAL_PROFILE,
   type Contact,
@@ -82,7 +92,8 @@ type CircleRoute =
   | { name: "personal" }
   | { name: "detail"; id: string }
   | { name: "manage"; id: string; section: ManageSection }
-  | { name: "hub"; id: string };
+  | { name: "hub"; id: string }
+  | { name: "spotlight"; id: string; tab: SpotlightTab };
 
 function toDemoCardPayload(profile: Profile, sessionToken: string, status?: "draft" | "published") {
   const fields = profile.fields
@@ -228,6 +239,12 @@ function HarmoniAppContent() {
   const [shareEntryInit, setShareEntryInit] = useState({ personaId: "main", destinationId: "personal", returnTo: "home" as View });
   const [personaFlowFrom, setPersonaFlowFrom] = useState<View>("welcome");
   const [dossierReturn, setDossierReturn] = useState<View>("persona-onboarding");
+  const connectDemo = useConnectDemo();
+  const [interestMatch, setInterestMatch] = useState<DemoMatch | null>(null);
+  const [reviewRequestId, setReviewRequestId] = useState<string | null>(null);
+  const [helpTarget, setHelpTarget] = useState<HelpTarget | null>(null);
+  const [spotlightAskCircleId, setSpotlightAskCircleId] = useState<string | null>(null);
+  const [connectReturnTab, setConnectReturnTab] = useState<Tab>("matches");
   const restoredDemoUser = useRef<string | null>(null);
   const personaIdCounter = useRef(1);
   const tabScrollPositions = useRef(new Map<Tab, number>());
@@ -510,7 +527,7 @@ function HarmoniAppContent() {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
-    if (screen !== "home" || activeTab !== "circles" || !demoSession) return;
+    if (screen !== "home" || (activeTab !== "circles" && activeTab !== "matches") || !demoSession) return;
     let active = true;
     void refreshMatches({ sessionToken: demoSession })
       .then((suggestions) => { if (active) setMatchingSuggestions(suggestions); })
@@ -1095,7 +1112,27 @@ function HarmoniAppContent() {
   const joinIntent = findCircle(joinIntentId);
   const joinCircle = findCircle(joinCircleId);
   const linkCircle = findCircle(linkCircleId);
-  const routedCircle = circleRoute.name === "detail" || circleRoute.name === "manage" || circleRoute.name === "hub" ? findCircle(circleRoute.id) : null;
+  const routedCircle = circleRoute.name === "detail" || circleRoute.name === "manage" || circleRoute.name === "hub" || circleRoute.name === "spotlight" ? findCircle(circleRoute.id) : null;
+  const personaOptions: PersonaOption[] = [{ name: "Main card", type: "main" }, ...personaPreviews.map((persona) => ({ name: persona.name, type: persona.type }))];
+  const personaSignature = JSON.stringify(personaPreviews.map((persona) => [persona.id, persona.needs, persona.offers, persona.interests]));
+  const reviewRequest = connectDemo.requests.find((request) => request.id === reviewRequestId) ?? null;
+  const spotlightAskCircle = findCircle(spotlightAskCircleId);
+  const activePersona = personaPreviews.find((persona) => persona.id === activePersonaId);
+
+  function openConnectView(next: View) {
+    setConnectReturnTab(activeTab);
+    navigate(next);
+  }
+
+  function backToConnectTab() {
+    setActiveTab(connectReturnTab);
+    navigate("home", connectReturnTab);
+  }
+
+  function openHelpOffer(target: HelpTarget) {
+    setHelpTarget(target);
+    openConnectView("help-offer");
+  }
 
   function openShareEntry(destinationId = "personal", personaId = activePersonaId ?? "main") {
     setShareEntryInit({ personaId, destinationId, returnTo: screen });
@@ -1371,6 +1408,76 @@ function HarmoniAppContent() {
             onDone={() => navigate("home", "scan")}
           />
         ) : null}
+        {screen === "express-interest" && interestMatch ? (
+          <ExpressInterestScreen
+            match={interestMatch}
+            circle={findCircle(interestMatch.circleId)}
+            persona={connectDemo.matchScope.persona}
+            onBack={backToConnectTab}
+            onSubmit={(kind, note) => connectDemo.expressInterest({
+              personId: interestMatch.personId,
+              name: interestMatch.name,
+              circleId: interestMatch.circleId,
+              kind,
+              note,
+              persona: connectDemo.matchScope.persona,
+              hostFirst: findCircle(interestMatch.circleId)?.settings.connectionApproval === "host-then-member",
+            })}
+            onReviewIncoming={(request) => { setReviewRequestId(request.id); navigate("request-review"); }}
+            onDone={backToConnectTab}
+          />
+        ) : null}
+        {screen === "request-review" && reviewRequest ? (
+          <RequestReviewScreen
+            request={reviewRequest}
+            circle={findCircle(reviewRequest.circleId)}
+            onBack={() => { connectDemo.setSegment("requests"); backToConnectTab(); }}
+            onDecide={(decision, grants) => connectDemo.respond(reviewRequest.id, decision, grants)}
+            onSaveGrants={(grants) => { connectDemo.updateGrants(reviewRequest.id, grants); setToast("Sharing updated. Future access follows the new choice."); }}
+          />
+        ) : null}
+        {screen === "help-offer" && helpTarget ? (
+          <HelpOfferScreen
+            target={helpTarget}
+            circle={findCircle(helpTarget.circleId)}
+            connected={Boolean(connectDemo.connectionWith(helpTarget.ownerId))}
+            openRequest={Boolean(connectDemo.openRequestWith(helpTarget.ownerId, helpTarget.circleId))}
+            onBack={backToConnectTab}
+            onSubmit={(text) => connectDemo.submitOffer({
+              toId: helpTarget.ownerId,
+              to: helpTarget.owner,
+              circleId: helpTarget.circleId,
+              text,
+              target: { type: helpTarget.type, id: helpTarget.id, label: helpTarget.type === "spotlight" ? `${helpTarget.owner.split(" ")[0]}’s Spotlight` : helpTarget.label },
+              persona: connectDemo.matchScope.persona,
+              hostFirst: findCircle(helpTarget.circleId)?.settings.connectionApproval === "host-then-member",
+            })}
+          />
+        ) : null}
+        {screen === "help-request" ? (
+          <HelpRequestScreen
+            circles={circleDemo.circles.filter((circle) => circle.status === "active" && circle.kind === "general")}
+            persona={connectDemo.matchScope.persona}
+            onBack={backToConnectTab}
+            onSubmit={(circleId, ask, timing) => {
+              connectDemo.createHelpRequest(circleId, ask, timing);
+              connectDemo.setSegment("help");
+              backToConnectTab();
+              setToast("Help request posted. Offers will appear under Help.");
+            }}
+          />
+        ) : null}
+        {screen === "spotlight-ask" && spotlightAskCircle ? (
+          <SpotlightAskScreen
+            circle={spotlightAskCircle}
+            spotlight={connectDemo.spotlights.find((spotlight) => spotlight.circleId === spotlightAskCircle.id)}
+            suggestion={activePersona?.needs.trim()
+              ? `Looking for help with: ${activePersona.needs.trim().split("\n")[0].slice(0, 140)}`
+              : `Hoping to swap a free weekend of tractor time for advice on drip irrigation before winter sowing.`}
+            onBack={() => { setActiveTab("circles"); navigate("home", "circles"); }}
+            onApprove={(ask) => connectDemo.approveMyAsk(spotlightAskCircle.id, ask)}
+          />
+        ) : null}
         {screen === "details" ? (
           <DetailsScreen profile={profile} xp={xp} saving={savingCard} onChange={updateText} onBack={() => navigate("auth")} onContinue={() => void continueDetails()} />
         ) : null}
@@ -1551,7 +1658,29 @@ function HarmoniAppContent() {
                 onRemove={(id) => { circleDemo.removeCapture(id); setToast("Pending record deleted."); }}
               />
             ) : null}
-            {activeTab === "matches" ? <MatchesLandingScreen onCreateContext={() => startPersonaFlow("home")} /> : null}
+            {activeTab === "matches" ? (
+              <MatchesHubScreen
+                demo={connectDemo}
+                circles={circleDemo.circles}
+                personas={personaOptions}
+                contextSignature={personaSignature}
+                realSuggestions={matchingSuggestions.map((suggestion) => ({ id: String(suggestion._id), name: suggestion.targetName, reason: suggestion.reason }))}
+                onDismissReal={(id) => {
+                  const suggestion = matchingSuggestions.find((item) => String(item._id) === id);
+                  if (!demoSession || !suggestion) return;
+                  void dismissMatch({ sessionToken: demoSession, suggestionId: suggestion._id })
+                    .then(() => setMatchingSuggestions((current) => current.filter((item) => item._id !== suggestion._id)))
+                    .catch((error: unknown) => setToast(error instanceof Error ? error.message.replace(/^Uncaught Error:\s*/, "") : "Match could not be dismissed."));
+                }}
+                onInterest={(match) => { setInterestMatch(match); openConnectView("express-interest"); }}
+                onReview={(request) => { setReviewRequestId(request.id); openConnectView("request-review"); }}
+                onOffer={openHelpOffer}
+                onAskHelp={() => openConnectView("help-request")}
+                onBuildPersona={() => activePersona ? addMorePersonaContext(activePersona) : startPersonaFlow("home")}
+                onDiscover={() => { circleDemo.setSegment("discover"); setCircleRoute({ name: "home" }); changeTab("circles"); }}
+                onToast={setToast}
+              />
+            ) : null}
             {activeTab === "notifications" ? <NotificationsLandingScreen /> : null}
             {activeTab === "circles" && circleRoute.name === "home" ? (
               <CirclesHomeScreen
@@ -1580,6 +1709,24 @@ function HarmoniAppContent() {
                 onManage={() => setCircleRoute({ name: "manage", id: routedCircle.id, section: "requests" })}
                 onShare={() => openShareEntry(routedCircle.id)}
                 onHub={() => setCircleRoute({ name: "hub", id: routedCircle.id })}
+                spotlight={routedCircle.kind === "general" && routedCircle.published && (routedCircle.status === "active" || routedCircle.role === "host") ? (
+                  <SpotlightCard
+                    circle={routedCircle}
+                    spotlight={connectDemo.spotlights.find((spotlight) => spotlight.circleId === routedCircle.id)}
+                    isHost={routedCircle.role === "host"}
+                    onOffer={() => {
+                      const current = connectDemo.spotlights.find((spotlight) => spotlight.circleId === routedCircle.id)?.current;
+                      if (current) openHelpOffer({ type: "spotlight", id: routedCircle.id, label: current.ask, ask: current.ask, ownerId: current.memberId, owner: current.member, circleId: routedCircle.id });
+                    }}
+                    onToggleQueue={() => {
+                      const inQueue = connectDemo.spotlights.find((spotlight) => spotlight.circleId === routedCircle.id)?.meInQueue;
+                      connectDemo.toggleQueue(routedCircle.id);
+                      setToast(inQueue ? "You left the Spotlight queue." : "You’re in the Spotlight queue.");
+                    }}
+                    onPrepareAsk={() => { setSpotlightAskCircleId(routedCircle.id); navigate("spotlight-ask"); }}
+                    onManage={() => setCircleRoute({ name: "spotlight", id: routedCircle.id, tab: "current" })}
+                  />
+                ) : null}
                 onLinkConsent={(link, allowed) => {
                   circleDemo.setLinkConsent(routedCircle.id, link.id, allowed);
                   setToast(allowed ? `You’re included in matching with ${link.otherName}.` : `You’re no longer matched with ${link.otherName}.`);
@@ -1597,11 +1744,23 @@ function HarmoniAppContent() {
                 onShare={() => openShareEntry(routedCircle.id)}
                 onLink={() => { setLinkCircleId(routedCircle.id); navigate("circle-link"); }}
                 onHub={() => setCircleRoute({ name: "hub", id: routedCircle.id })}
+                onSpotlights={() => setCircleRoute({ name: "spotlight", id: routedCircle.id, tab: "current" })}
                 onToast={setToast}
               />
             ) : null}
             {activeTab === "circles" && routedCircle && circleRoute.name === "hub" ? (
               <HubStructureScreen circle={routedCircle} onBack={() => setCircleRoute({ name: "detail", id: routedCircle.id })} />
+            ) : null}
+            {activeTab === "circles" && routedCircle && circleRoute.name === "spotlight" ? (
+              <SpotlightManagerScreen
+                circle={routedCircle}
+                spotlight={connectDemo.spotlights.find((spotlight) => spotlight.circleId === routedCircle.id)}
+                demo={connectDemo}
+                tab={circleRoute.tab}
+                onTab={(tab) => setCircleRoute({ name: "spotlight", id: routedCircle.id, tab })}
+                onBack={() => setCircleRoute({ name: "manage", id: routedCircle.id, section: "requests" })}
+                onToast={setToast}
+              />
             ) : null}
             {activeTab === "circles" && circleRoute.name !== "home" && circleRoute.name !== "personal" && !routedCircle ? (
               <div className="card p1-empty-state"><h2>This circle isn’t available</h2><p>It may have been removed or you no longer have access.</p><button className="btn g s" type="button" onClick={circleHome}>Back to circles</button></div>

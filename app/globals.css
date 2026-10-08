@@ -259,3 +259,35 @@ button:focus-visible,.p1-type-card:focus-visible,.p1-visibility-option:focus-vis
 .p2-capture-photo{display:block;width:100%;max-height:220px;object-fit:cover;border-radius:22px;margin:0 0 14px;box-shadow:0 20px 36px -24px rgba(120,86,24,.7)}
 .p2-notices .ct b{font-size:15px;line-height:1.35}.p2-notices .ct .m div{white-space:normal}
 select:focus-visible{outline:2px solid rgba(156,116,37,.7);outline-offset:2px}
+
+/* Phase 3: matches, introductions, help and Spotlight */
+.p3-scope{padding:12px}.p3-scope .p2-select-row{background:rgba(255,253,248,.7);margin-bottom:8px}
+.p3-refresh-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:2px 4px 0}.p3-refresh-row .pill{font-size:12px;padding:7px 12px}
+.p3-skeleton{display:grid;gap:10px;padding:18px}.p3-skeleton i{display:block;height:12px;border-radius:99px;background:rgba(201,162,76,.18);animation:intro-network-pulse 1.1s ease-in-out infinite alternate}.p3-skeleton i:nth-child(1){width:55%;height:16px}.p3-skeleton i:nth-child(3){width:70%}
+.p3-match{padding:15px 16px}.p3-match .p2-listing-head{gap:10px}
+.p3-rank{width:22px;flex:none;font:400 22px 'Instrument Serif',Georgia,serif;color:#9C7425;text-align:center}
+.p3-fit{flex:none;font-size:10.5px;font-weight:700;padding:5px 9px;border-radius:99px;white-space:nowrap}.p3-fit.strong{background:var(--gold);color:#3A2A12}.p3-fit.good{background:rgba(243,223,162,.55);color:#795A20}.p3-fit.possible{background:rgba(42,33,23,.06);color:var(--mu)}
+.p3-reason{margin:12px 0 2px;font-size:14px;line-height:1.45;color:var(--ink)}
+.p3-dimensions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}.p3-dimensions div{display:flex;gap:8px;align-items:flex-start;padding:9px 10px;border-radius:14px;background:rgba(255,253,248,.7);border:1px solid var(--ln);font-size:13px;line-height:1.3}
+.p3-dimensions i{width:20px;height:20px;flex:none;display:grid;place-items:center;border-radius:50%;font-style:normal;font-size:11px;font-weight:700}.p3-dimensions .match i{background:rgba(47,143,91,.14);color:var(--ok)}.p3-dimensions .partial i{background:rgba(201,162,76,.2);color:#8A6720}.p3-dimensions .unknown i{background:rgba(42,33,23,.07);color:var(--mu)}
+.p3-dimensions small{display:block;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mu)}
+.p3-confidence{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;padding:9px 12px;border-radius:14px;background:rgba(108,60,230,.05);font-size:13px}.p3-confidence span{color:var(--mu);font-weight:600}.p3-confidence small{color:var(--mu);flex-basis:100%}
+.p3-state{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding:10px 12px;border-radius:14px;font-size:13px;font-weight:600}.p3-state svg{flex:none}.p3-state.ok{background:rgba(47,143,91,.08);color:var(--ok);justify-content:flex-start}.p3-state.info{background:rgba(108,60,230,.07);color:#5a35b8}.p3-state.wait{background:rgba(201,162,76,.14);color:#8A6720}.p3-state .pill{font-size:12px;padding:6px 11px}
+.p3-request{padding:15px 16px}.p3-note{margin:10px 0 0;font-size:13.5px;line-height:1.45;color:var(--ink);font-style:italic}
+.p3-grants{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.p3-grants span{font-size:11.5px;font-weight:600;padding:5px 10px;border-radius:99px;background:rgba(42,33,23,.05);color:var(--mu)}.p3-grants span.on{background:rgba(47,143,91,.1);color:var(--ok)}
+.p3-ask-help{margin:2px 0 6px}
+.p3-help{padding:15px 16px}.p3-help.closed{opacity:.6}.p3-help-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.p3-help-head b{font-size:15px;line-height:1.35}
+.p3-ask{margin:10px 0 12px;font-size:15px;line-height:1.45;color:var(--ink)}
+.p3-offer{margin-top:12px;padding-top:12px;border-top:1px solid var(--ln)}.p3-offer p{margin:8px 0 0;font-size:13.5px;color:var(--ink)}
+.p3-person{display:grid;justify-items:center;margin:8px 0 4px}.p3-person h1{margin:12px 0 4px;font-size:38px}.p3-person p{margin:0}
+.p3-quote{padding:14px 16px;font-size:14.5px;line-height:1.5;font-style:italic;color:var(--ink)}.p3-big-quote{font:400 24px/1.25 'Instrument Serif',Georgia,serif;font-style:italic;margin-top:4px}
+.p3-grant-card{padding:6px 16px}.p3-grant-card .tg{border-bottom:1px solid var(--ln)}.p3-grant-card .tg:last-child{border-bottom:0}.p3-grant-card b{font-size:14.5px}
+.ft.p3-two-buttons{display:flex;gap:10px}.ft.p3-two-buttons .btn{flex:1;margin:0}
+.p3-spotlight{padding:16px;border-color:rgba(201,162,76,.5);background:linear-gradient(160deg,rgba(243,223,162,.32),rgba(255,253,248,.75))}
+.p3-spotlight-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.p3-spotlight-badge{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:5px 10px;border-radius:99px;background:var(--gold);color:#3A2A12}
+.p3-help-button{margin-top:12px}.p3-empty-copy{margin:0 0 4px;font-size:14px}
+.p3-my-slot{margin-top:14px;padding:12px 14px;border-radius:16px;border:1px dashed rgba(201,162,76,.65);background:rgba(255,253,248,.7)}.p3-my-slot b{font-size:14px}.p3-my-slot p{font-size:12.5px;margin:4px 0 8px}
+.p3-queue-toggle{margin-top:8px;border-top:1px solid var(--ln);padding-top:14px}.p3-queue-toggle b{font-size:14px}
+.p3-results{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.p3-results div{padding:10px 8px;border-radius:14px;background:rgba(255,253,248,.75);border:1px solid var(--ln);text-align:center}.p3-results b{display:block;font:400 24px/1.1 'Instrument Serif',Georgia,serif}.p3-results small{font-size:10.5px;color:var(--mu);font-weight:600}
+.p3-slot{padding:14px 16px}.p3-slot>.tag{margin-top:6px}
+.p3-suggestion{padding:14px 16px;border-style:dashed;border-color:rgba(201,162,76,.6)}.p3-suggestion p{margin:6px 0 10px;font-size:14px;color:var(--ink)}.p3-suggestion .pill{font-size:12px}

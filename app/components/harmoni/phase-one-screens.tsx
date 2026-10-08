@@ -542,23 +542,6 @@ export function PersonaHubScreen({
   );
 }
 
-export function MatchesLandingScreen({ onCreateContext }: { onCreateContext: () => void }) {
-  return (
-    <>
-      <p className="tag p1-eyebrow">A good connection starts with context</p>
-      <h1>Find your<br /><i>next connection.</i></h1>
-      <p>When approved context is available, this is where relevant introductions will appear.</p>
-      <div className="p1-match-orbit" aria-hidden="true"><div className="p1-orbit-ring one" /><div className="p1-orbit-ring two" /><div className="p1-orbit-center"><Icon name="sparkle" size={34} /></div><span className="p1-orbit-dot a" /><span className="p1-orbit-dot b" /><span className="p1-orbit-dot c" /></div>
-      <div className="card p1-empty-state">
-        <span className="p1-eyebrow">Your match space</span>
-        <h2>Let&apos;s add your context</h2>
-        <p>Start with what would make a connection useful right now. Matching is not active in this UI preview.</p>
-        <button className="btn g s" type="button" onClick={onCreateContext}>Build a persona</button>
-      </div>
-    </>
-  );
-}
-
 export function NotificationsLandingScreen() {
   return (
     <>
