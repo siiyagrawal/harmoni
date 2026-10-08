@@ -7,11 +7,15 @@ export function AppHeader({
   onSetup,
   onEdit,
   onScan,
+  onMessages,
+  unreadMessages = 0,
 }: {
   onMenu: () => void;
   onSetup: () => void;
   onEdit: () => void;
   onScan: () => void;
+  onMessages: () => void;
+  unreadMessages?: number;
 }) {
   return (
     <div className="top">
@@ -23,6 +27,7 @@ export function AppHeader({
       </div>
       <span className="wm">Harmoni</span>
       <div className="row header-tools">
+        <button className="ib p4-header-messages" type="button" onClick={onMessages} aria-label={unreadMessages ? `Messages, ${unreadMessages} unread` : "Messages"}><Icon name="chat" />{unreadMessages ? <span className="p4-badge">{unreadMessages}</span> : null}</button>
         <button className="ib" type="button" onClick={onEdit} aria-label="Design your card"><Icon name="edit" /></button>
         <button className="ib" type="button" onClick={onScan} aria-label="Scan a card"><Icon name="plus" /></button>
       </div>
@@ -38,7 +43,7 @@ const NAV_ITEMS: Array<{ id: Tab; title: string; icon: IconName }> = [
   { id: "you", title: "You", icon: "person" },
 ];
 
-export function BottomNav({ active, onChange }: { active: Tab; onChange: (tab: Tab) => void }) {
+export function BottomNav({ active, onChange, badges = {} }: { active: Tab; onChange: (tab: Tab) => void; badges?: Partial<Record<Tab, number>> }) {
   const current = active === "contacts" ? "you" : active;
   return (
     <nav aria-label="Main navigation">
@@ -49,7 +54,9 @@ export function BottomNav({ active, onChange }: { active: Tab; onChange: (tab: T
           key={item.id}
           onClick={() => onChange(item.id)}
           aria-current={current === item.id ? "page" : undefined}
+          aria-label={badges[item.id] ? `${item.title}, ${badges[item.id]} unread` : undefined}
         >
+          {badges[item.id] ? <span className="p4-badge p4-nav-badge">{badges[item.id]}</span> : null}
           {item.id === "scan" ? <><i><Icon name={item.icon} size={26} /></i><span>{item.title}</span></> : <><Icon name={item.icon} size={22} strokeWidth={1.8} /><span>{item.title}</span></>}
         </button>
       ))}

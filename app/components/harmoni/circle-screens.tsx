@@ -987,7 +987,7 @@ export function HubApplyScreen({
   );
 }
 
-export function HubStructureScreen({ circle, onBack }: { circle: DemoCircle; onBack: () => void }) {
+export function HubStructureScreen({ circle, onBack, onWrite }: { circle: DemoCircle; onBack: () => void; onWrite: () => void }) {
   const hub = circle.hub;
   if (!hub) {
     return (
@@ -1018,8 +1018,7 @@ export function HubStructureScreen({ circle, onBack }: { circle: DemoCircle; onB
         <p>Write to your assigned Level 2 Admin{myAdmin ? ` (${myAdmin.name.split(" · ")[0]})` : ""}. If needed, they escalate to your branch’s Level 1 Admin, then the Hub Super Admin. Replies follow the same chain.</p>
         <b>Downward</b>
         <p>Admins send notices to the branches they manage.</p>
-        <button className="btn g s" type="button" disabled>Write to my Level 2 Admin</button>
-        <p className="p2-fine">Hub messaging arrives with the Messaging phase.</p>
+        {hub.myRole === "participant" ? <button className="btn g s" type="button" onClick={onWrite}>Write to my Level 2 Admin</button> : null}
       </div>
       <div className="card p2-check-list no">
         <div><Icon name="close" size={17} /><span>No participant-to-participant chat</span></div>

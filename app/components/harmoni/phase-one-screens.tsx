@@ -541,19 +541,3 @@ export function PersonaHubScreen({
     </section>
   );
 }
-
-export function NotificationsLandingScreen() {
-  return (
-    <>
-      <p className="tag p1-eyebrow">Stay in the loop</p>
-      <h1>Your updates,<br /><i>all in one place.</i></h1>
-      <div className="p1-notification-hero"><div className="p1-notification-bell"><Icon name="bell" size={31} /></div><span className="p1-notification-dot" /></div>
-      <div className="card p1-empty-state">
-        <span className="p1-eyebrow">Notifications</span>
-        <h2>You&apos;re all caught up</h2>
-        <p>Circle activity, requests, and new connections will appear here.</p>
-      </div>
-      <div className="p1-demo-caption">Notification delivery and preferences will be added in a later phase.</div>
-    </>
-  );
-}

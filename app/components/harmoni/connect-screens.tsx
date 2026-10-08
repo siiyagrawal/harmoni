@@ -53,9 +53,11 @@ export function MatchesHubScreen({
   onAskHelp,
   onBuildPersona,
   onDiscover,
+  onMessage,
   onToast,
 }: {
   demo: ConnectDemo;
+  onMessage: (request: ConnRequest) => void;
   circles: DemoCircle[];
   personas: PersonaOption[];
   contextSignature: string;
@@ -141,7 +143,8 @@ export function MatchesHubScreen({
                   match={match}
                   circleName={circleName(match.circleId)}
                   request={demo.openRequestWith(match.personId, match.circleId)}
-                  connected={Boolean(demo.connectionWith(match.personId))}
+                  connection={demo.connectionWith(match.personId)}
+                  onMessage={onMessage}
                   onInterest={() => onInterest(match)}
                   onReview={onReview}
                   onDismiss={() => demo.dismissMatch(match.id)}
@@ -169,7 +172,7 @@ export function MatchesHubScreen({
         </>
       ) : null}
 
-      {segment === "requests" ? <RequestsPanel demo={demo} circleName={circleName} onReview={onReview} onToast={onToast} /> : null}
+      {segment === "requests" ? <RequestsPanel demo={demo} circleName={circleName} onReview={onReview} onMessage={onMessage} onToast={onToast} /> : null}
       {segment === "help" ? <HelpPanel demo={demo} activeIds={activeIds} circleName={circleName} onOffer={onOffer} onAskHelp={onAskHelp} onToast={onToast} /> : null}
     </>
   );
@@ -180,7 +183,8 @@ function MatchCard({
   match,
   circleName,
   request,
-  connected,
+  connection,
+  onMessage,
   onInterest,
   onReview,
   onDismiss,
@@ -190,7 +194,8 @@ function MatchCard({
   match: DemoMatch;
   circleName: string;
   request?: ConnRequest;
-  connected: boolean;
+  connection?: ConnRequest;
+  onMessage: (request: ConnRequest) => void;
   onInterest: () => void;
   onReview: (request: ConnRequest) => void;
   onDismiss: () => void;
@@ -198,7 +203,9 @@ function MatchCard({
 }) {
   const [open, setOpen] = useState(rank === 1);
   let action: ReactNode;
-  if (connected) action = <div className="p3-state ok"><Icon name="check" size={16} />Connected. Messaging arrives in the next phase.</div>;
+  if (connection) action = connection.grants?.chat
+    ? <div className="p3-state ok"><span><Icon name="check" size={16} /> Connected</span><button className="pill on" type="button" onClick={() => onMessage(connection)}>Message</button></div>
+    : <div className="p3-state ok"><Icon name="check" size={16} />Connected. Messaging isn’t part of this connection.</div>;
   else if (request?.direction === "incoming") action = <div className="p3-state info"><span>{match.name.split(" ")[0]} asked to connect with you.</span><button className="pill on" type="button" onClick={() => onReview(request)}>Review</button></div>;
   else if (request) action = <div className="p3-state wait"><span>{request.status === "host-review" ? "Your request is with the host" : "Your request is pending"}</span><button className="pill" type="button" onClick={onOpenRequests}>View</button></div>;
   else action = (
@@ -236,7 +243,7 @@ function MatchCard({
   );
 }
 
-function RequestsPanel({ demo, circleName, onReview, onToast }: { demo: ConnectDemo; circleName: (id: string) => string; onReview: (request: ConnRequest) => void; onToast: (message: string) => void }) {
+function RequestsPanel({ demo, circleName, onReview, onMessage, onToast }: { demo: ConnectDemo; circleName: (id: string) => string; onReview: (request: ConnRequest) => void; onMessage: (request: ConnRequest) => void; onToast: (message: string) => void }) {
   const { requestFilter, setRequestFilter } = demo;
   const reviewCount = demo.requests.filter((request) => request.direction === "review" && request.status === "host-review").length;
   const list = demo.requests.filter((request) => request.direction === requestFilter);
@@ -272,7 +279,9 @@ function RequestsPanel({ demo, circleName, onReview, onToast }: { demo: ConnectD
               <>
                 <GrantSummary grants={request.grants} />
                 <div className="p2-inline-row">
-                  <button className="btn g s" type="button" disabled>Message · next phase</button>
+                  {request.grants?.chat
+                    ? <button className="btn s" type="button" onClick={() => onMessage(request)}>Message</button>
+                    : <button className="btn g s" type="button" disabled>Messaging not allowed</button>}
                   {request.direction === "incoming" ? <button className="pill" type="button" onClick={() => onReview(request)}>What I share</button> : null}
                 </div>
               </>
@@ -474,9 +483,11 @@ export function RequestReviewScreen({
   onBack,
   onDecide,
   onSaveGrants,
+  onMessage,
 }: {
   request: ConnRequest;
   circle: DemoCircle | null;
+  onMessage: () => void;
   onBack: () => void;
   onDecide: (decision: "approve" | "decline", grants: Grants) => "approved" | "declined" | "invalid" | "missing";
   onSaveGrants: (grants: Grants) => void;
@@ -503,7 +514,12 @@ export function RequestReviewScreen({
             ? `${first} sees it as not accepted, without a reason. They won’t be prompted to ask again.`
             : `${first} is no longer an active member of ${circle?.name}, so the request was closed and nothing was shared.`}</p>
         {result === "approved" ? <GrantSummary grants={grants} /> : null}
-        <div className="ft"><button className="btn" type="button" onClick={onBack}>Back to requests</button></div>
+        {result === "approved" && grants.chat ? <button className="lk p2-bottom-space" type="button" onClick={onBack}>Back to requests</button> : null}
+        <div className="ft">
+          {result === "approved" && grants.chat
+            ? <button className="btn" type="button" onClick={onMessage}>Send {first} a message</button>
+            : <button className="btn" type="button" onClick={onBack}>Back to requests</button>}
+        </div>
       </>
     );
   }

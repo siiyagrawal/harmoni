@@ -290,4 +290,42 @@ select:focus-visible{outline:2px solid rgba(156,116,37,.7);outline-offset:2px}
 .p3-queue-toggle{margin-top:8px;border-top:1px solid var(--ln);padding-top:14px}.p3-queue-toggle b{font-size:14px}
 .p3-results{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.p3-results div{padding:10px 8px;border-radius:14px;background:rgba(255,253,248,.75);border:1px solid var(--ln);text-align:center}.p3-results b{display:block;font:400 24px/1.1 'Instrument Serif',Georgia,serif}.p3-results small{font-size:10.5px;color:var(--mu);font-weight:600}
 .p3-slot{padding:14px 16px}.p3-slot>.tag{margin-top:6px}
+/* Phase 4: notifications and messaging */
+.p4-header-messages,nav button{position:relative}
+.p4-badge{position:absolute;top:-3px;right:-3px;min-width:18px;height:18px;padding:0 5px;border-radius:99px;background:#D27F62;color:#fff;font-size:10.5px;font-weight:700;line-height:18px;text-align:center;box-shadow:0 0 0 2px var(--bg)}
+.p4-nav-badge{top:2px;right:calc(50% - 22px)}
+@media(max-width:400px){.top .header-tools{gap:4px}.top .ib{width:38px;height:38px}.top .rg svg{width:38px;height:38px}.top .wm{font-size:26px}}
+.p4-btn-inner{display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.p4-consent{display:flex;gap:12px;align-items:flex-start;border-color:rgba(201,162,76,.5);background:rgba(243,223,162,.28)}.p4-consent b{font-size:15px}.p4-consent>div>p{font-size:13px;margin:4px 0 0}.p4-consent .p2-fine{margin:10px 0 0}
+.p4-mark-all{margin:-4px 0 8px auto;display:flex;justify-content:flex-end;width:100%;padding:4px 2px}
+.p4-list{padding:2px 6px}
+.p4-row{width:100%;display:flex;align-items:center;gap:12px;padding:13px 8px;border:0;border-bottom:1px solid var(--ln);background:none;color:var(--ink);text-align:left;font:inherit;cursor:pointer}.p4-list>div:last-child .p4-row,.p4-list>.p4-row:last-child{border-bottom:0}
+.p4-row .p4-copy b{font-weight:500}.p4-row.unread .p4-copy b{font-weight:700}.p4-row.resolved{opacity:.7}
+.p4-icon{width:38px;height:38px;flex:none;display:grid;place-items:center;border-radius:13px;background:rgba(243,223,162,.5);color:#8A6720}
+.p4-copy{flex:1;min-width:0;display:grid;gap:2px}.p4-copy b{font-size:14.5px;line-height:1.3}.p4-copy small{font-size:12px;color:var(--mu);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.p4-meta{flex:none;display:grid;justify-items:end;gap:6px}.p4-meta .tag{font-size:11.5px}
+.p4-dot{width:9px;height:9px;border-radius:50%;background:#D27F62;display:block}
+.p4-count{min-width:20px;height:20px;padding:0 6px;border-radius:99px;background:var(--gold);color:#3A2A12;font-size:11px;font-weight:700;line-height:20px;text-align:center}
+.p4-resolution{margin:0 8px 12px 58px;padding:10px 12px;border-radius:14px;background:rgba(42,33,23,.05);font-size:13px;color:var(--ink)}
+.p4-preview{color:var(--ink)!important;opacity:.75}.p4-muted{font-weight:500;color:var(--mu);font-size:12px}
+.p4-cadence-card{padding:12px}.p4-cadence-card .p2-select-row{background:rgba(255,253,248,.7);margin-bottom:8px}.p4-cadence-card .p2-select-row span{flex:1;color:var(--ink)}.p4-cadence-card .p2-select-row select{flex:none}.p4-cadence-card .p2-select-row:last-child{margin-bottom:0}.p4-cadence-card .p2-two-col .p2-select-row span{color:var(--mu)}
+.p4-preview-link{display:inline-block;margin-top:12px;text-decoration:none}
+.p4-delivery{cursor:default;align-items:flex-start}.p4-delivery .m b{font-size:14px}.p4-delivery .m div{white-space:normal!important;font-size:12px;line-height:1.4}
+.p4-thread-head{position:sticky;top:0;z-index:4;display:flex;align-items:center;gap:10px;margin:0 -22px;padding:10px 22px;background:linear-gradient(var(--bg) 70%,rgba(251,247,239,0))}
+.p4-thread-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 0 10px}
+.p4-retention{padding:11px 14px;font-size:12px;line-height:1.45;color:var(--mu);background:rgba(42,33,23,.03)}
+.p4-offline{margin-top:4px}
+.p4-messages{display:grid;gap:10px;padding:6px 0 130px}
+.p4-system{margin:6px auto;max-width:86%;text-align:center;font-size:12px;color:var(--mu)}
+.p4-bubble-wrap{display:grid;justify-items:start;gap:3px;max-width:82%}.p4-bubble-wrap.mine{justify-self:end;justify-items:end}
+.p4-bubble{border:1px solid var(--gb);border-radius:20px 20px 20px 6px;padding:10px 14px;background:var(--gs);color:var(--ink);font:inherit;font-size:15px;line-height:1.4;text-align:left;white-space:pre-wrap;word-break:break-word;box-shadow:inset 0 1px 0 #fff;cursor:default}
+.mine .p4-bubble{border-radius:20px 20px 6px 20px;background:linear-gradient(135deg,rgba(243,223,162,.9),rgba(214,177,92,.7));border-color:transparent;cursor:pointer}
+.p4-bubble.deleted{font-style:italic;color:var(--mu);background:rgba(42,33,23,.04)!important}.p4-bubble.failed{opacity:.6;border:1px dashed #b5482f}
+.p4-stamp{font-size:11px;color:var(--mu)}.p4-retry{font-size:11.5px;padding:5px 10px;color:#b5482f}
+.p4-message-actions{display:flex;align-items:center;gap:8px}.p4-message-actions .pill{font-size:11.5px;padding:6px 10px}
+.p4-escalate{justify-self:center;width:auto;padding:6px 0}
+.ft.p4-composer{display:flex;align-items:flex-end;gap:10px;padding-top:18px}
+.p4-composer textarea{flex:1;min-height:50px;max-height:140px;resize:none;border:1px solid rgba(42,33,23,.1);border-radius:24px;padding:14px 18px;background:rgba(255,253,248,.95);color:var(--ink);font:inherit;font-size:16px;outline:0;box-shadow:0 10px 24px -18px rgba(120,86,24,.6)}.p4-composer textarea:focus{border-color:rgba(201,162,76,.85)}
+.p4-send{width:50px;height:50px;flex:none;display:grid;place-items:center;border:0;border-radius:50%;background:var(--gold);color:#2A1E0A;cursor:pointer;box-shadow:0 12px 24px -12px rgba(176,138,54,.95)}.p4-send:disabled{opacity:.45;cursor:not-allowed}
+.ft.p4-readonly{text-align:center}.p4-readonly p{margin:0 0 6px;font-size:13px;padding:12px 14px;border-radius:18px;background:rgba(255,253,248,.92);border:1px solid var(--gb)}
 .p3-suggestion{padding:14px 16px;border-style:dashed;border-color:rgba(201,162,76,.6)}.p3-suggestion p{margin:6px 0 10px;font-size:14px;color:var(--ink)}.p3-suggestion .pill{font-size:12px}

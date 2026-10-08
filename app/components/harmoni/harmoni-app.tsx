@@ -34,7 +34,6 @@ import {
 import {
   GuestCirclePreviewScreen,
   JoinCodeScreen,
-  NotificationsLandingScreen,
   PersonaHubScreen,
   PersonaOnboardingScreen,
   PersonaPermissionsScreen,
@@ -63,7 +62,10 @@ import {
 } from "./entry-share-screens";
 import { EMPTY_CIRCLE_DRAFT, joinCodeToCircle, useCircleDemo } from "./circle-data";
 import { Icon } from "./ui";
-import { useConnectDemo, type DemoMatch } from "./connect-data";
+import { useConnectDemo, type ConnRequest, type DemoMatch } from "./connect-data";
+import { useMessagingDemo, useNotificationsDemo, type DemoNotification, type DemoThread } from "./notify-data";
+import { NotificationSettingsScreen, NotificationsScreen } from "./notify-screens";
+import { MessagesInboxScreen, ThreadScreen, type ThreadAccess } from "./message-screens";
 import {
   ExpressInterestScreen,
   HelpOfferScreen,
@@ -245,6 +247,13 @@ function HarmoniAppContent() {
   const [helpTarget, setHelpTarget] = useState<HelpTarget | null>(null);
   const [spotlightAskCircleId, setSpotlightAskCircleId] = useState<string | null>(null);
   const [connectReturnTab, setConnectReturnTab] = useState<Tab>("matches");
+  const notificationsDemo = useNotificationsDemo();
+  const messagingDemo = useMessagingDemo();
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [threadReturn, setThreadReturn] = useState<View>("messages");
+  const [messagesReturn, setMessagesReturn] = useState<View>("home");
+  const [messagesReturnTab, setMessagesReturnTab] = useState<Tab>("notifications");
+  const [pendingAlertId, setPendingAlertId] = useState<string | null>(null);
   const restoredDemoUser = useRef<string | null>(null);
   const personaIdCounter = useRef(1);
   const tabScrollPositions = useRef(new Map<Tab, number>());
@@ -381,6 +390,18 @@ function HarmoniAppContent() {
     const slug = params.get("shareback");
     if (slug) setPendingShareBackSlug(slug);
     // QR codes, NFC tags, shared links and join codes all resolve to the same circle entry.
+    const alertId = params.get("alert");
+    if (alertId) {
+      setPendingAlertId(alertId);
+      let hasSession = false;
+      try {
+        hasSession = Boolean(localStorage.getItem(SESSION_KEY));
+      } catch {}
+      if (!hasSession) {
+        setAuthMode("signin");
+        setScreen("auth");
+      }
+    }
     const joinCode = params.get("join");
     const joinCircle = joinCode ? joinCodeToCircle(circleDemo.circles, joinCode) : undefined;
     if (joinCircle) {
@@ -1124,6 +1145,152 @@ function HarmoniAppContent() {
     navigate(next);
   }
 
+  const activeThread = messagingDemo.threads.find((thread) => thread.id === threadId) ?? null;
+  const unreadMessages = messagingDemo.threads.filter((thread) => !thread.hidden).reduce((sum, thread) => sum + thread.unread, 0);
+  const unreadNotifications = notificationsDemo.items.filter((item) => !item.read).length;
+
+  // Every send and open rechecks the connection grant, circle membership and block state.
+  function threadAccess(thread: DemoThread): ThreadAccess {
+    if (thread.blocked) return { allowed: false, reason: "blocked" };
+    const circle = findCircle(thread.circleId);
+    const member = Boolean(circle && (circle.status === "active" || circle.role === "host"));
+    if (thread.kind === "hub") return member ? { allowed: true, reason: "ok" } : { allowed: false, reason: "left" };
+    const request = connectDemo.requests.find((item) => item.id === thread.requestId) ?? connectDemo.connectionWith(thread.personId);
+    if (!request || request.status === "withdrawn") return { allowed: false, reason: "withdrawn" };
+    if (request.status !== "approved") return { allowed: false, reason: "left" };
+    if (!request.grants?.chat) return { allowed: false, reason: "no-grant" };
+    if (!member) return { allowed: false, reason: "left" };
+    return { allowed: true, reason: "ok" };
+  }
+
+  function openThread(id: string, from: View = screen) {
+    if (from === "messages" || from === "thread") setThreadReturn("messages");
+    else {
+      setThreadReturn("home");
+      setMessagesReturnTab(from === "home" ? activeTab : connectReturnTab);
+    }
+    setThreadId(id);
+    messagingDemo.markRead(id);
+    notificationsDemo.items
+      .filter((item) => item.destination.type === "thread" && item.destination.id === id && !item.read)
+      .forEach((item) => notificationsDemo.markRead(item.id));
+    navigate("thread");
+  }
+
+  function messageConnection(request: ConnRequest) {
+    const id = messagingDemo.findOrCreate({
+      kind: "connection",
+      personId: request.personId,
+      name: request.name,
+      myPersona: request.direction === "sent" ? request.persona : connectDemo.matchScope.persona,
+      theirPersona: request.direction === "incoming" ? request.persona : "Business",
+      circleId: request.circleId,
+      requestId: request.id,
+    });
+    openThread(id);
+  }
+
+  function openMessages() {
+    if (screen === "home") setMessagesReturnTab(activeTab);
+    setMessagesReturn(screen === "messages" || screen === "thread" ? "home" : screen);
+    navigate("messages");
+  }
+
+  function leaveMessages() {
+    if (messagesReturn === "home") {
+      setActiveTab(messagesReturnTab);
+      navigate("home", messagesReturnTab);
+    } else navigate(messagesReturn);
+  }
+
+  // Recheck the request, thread or circle behind an alert before opening it.
+  function resolveNotification(item: DemoNotification): string | null {
+    const destination = item.destination;
+    if (destination.type === "request") {
+      const request = connectDemo.requests.find((entry) => entry.id === destination.id);
+      const first = request?.name.split(" ")[0];
+      if (!request) return "This request is no longer available.";
+      if (request.status === "pending") return request.eligible ? null : "This request is no longer available.";
+      if (request.status === "approved") return `Already handled: you’re connected with ${first}.`;
+      if (request.status === "declined") return "You already declined this request.";
+      if (request.status === "withdrawn") return `${first} withdrew this request, so there’s nothing to do.`;
+      if (request.status === "expired") return "This request expired.";
+      return "This request is no longer available.";
+    }
+    if (destination.type === "thread") return messagingDemo.threads.some((thread) => thread.id === destination.id) ? null : "This conversation is no longer available.";
+    if (destination.type === "circle" || destination.type === "hub" || destination.type === "spotlight-ask") {
+      const circle = findCircle(destination.type === "circle" ? destination.id : destination.circleId);
+      if (!circle || !circle.published) return "This circle is no longer available.";
+      if (item.category === "invite" && circle.status !== "invited") return "You’ve already answered this invitation.";
+      if (item.category === "admission" && circle.status !== "payment") return "Your membership status has changed since this update.";
+      if (destination.type !== "circle" && circle.status !== "active") return "You’re no longer an active member of this circle.";
+    }
+    return null;
+  }
+
+  function openNotification(item: DemoNotification) {
+    notificationsDemo.markRead(item.id);
+    const resolution = resolveNotification(item);
+    if (resolution) {
+      setActiveTab("notifications");
+      navigate("home", "notifications");
+      setToast(resolution);
+      return;
+    }
+    const destination = item.destination;
+    switch (destination.type) {
+      case "request":
+        setReviewRequestId(destination.id);
+        setConnectReturnTab("notifications");
+        navigate("request-review");
+        break;
+      case "requests":
+        connectDemo.setSegment("requests");
+        connectDemo.setRequestFilter(destination.filter);
+        setActiveTab("matches");
+        navigate("home", "matches");
+        break;
+      case "matches":
+      case "help":
+        connectDemo.setSegment(destination.type === "help" ? "help" : "matches");
+        setActiveTab("matches");
+        navigate("home", "matches");
+        break;
+      case "thread":
+        setMessagesReturnTab("notifications");
+        openThread(destination.id, "home");
+        break;
+      case "circle":
+        setActiveTab("circles");
+        setCircleRoute({ name: "detail", id: destination.id });
+        navigate("home", "circles");
+        break;
+      case "hub":
+        setActiveTab("circles");
+        setCircleRoute({ name: "hub", id: destination.circleId });
+        navigate("home", "circles");
+        break;
+      case "spotlight-ask":
+        setSpotlightAskCircleId(destination.circleId);
+        navigate("spotlight-ask");
+        break;
+    }
+  }
+
+  // An alert link opened from outside returns to its exact destination, after sign-in if needed.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!pendingAlertId || screen !== "home" || !demoSession) return;
+    const item = notificationsDemo.items.find((entry) => entry.id === pendingAlertId);
+    setPendingAlertId(null);
+    router.replace("/");
+    if (item) openNotification(item);
+    else setToast("That update is no longer available.");
+  // openNotification reads the latest sample state when the home screen is ready.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAlertId, screen, demoSession]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   function backToConnectTab() {
     setActiveTab(connectReturnTab);
     navigate("home", connectReturnTab);
@@ -1246,6 +1413,7 @@ function HarmoniAppContent() {
         ) : null}
         {screen === "auth" ? (
           <>
+            {pendingAlertId && !personaGatePending ? <div className="card p1-static-notice p1-auth-context-note"><b>Sign in to open your update</b><p>We’ll take you straight to it after you sign in.</p></div> : null}
             {personaGatePending ? <div className="card p1-static-notice p1-auth-context-note"><b>Verify to save your persona</b><p>Create your demo account to keep your persona draft.{joinIntent ? ` Saving doesn’t join ${joinIntent.name}; you’ll confirm joining next.` : ""} Persona details are a session-only preview in this phase; your existing card flow keeps its current save behavior.</p></div> : null}
             <DemoAuthScreen
               mode={authMode}
@@ -1434,6 +1602,7 @@ function HarmoniAppContent() {
             onBack={() => { connectDemo.setSegment("requests"); backToConnectTab(); }}
             onDecide={(decision, grants) => connectDemo.respond(reviewRequest.id, decision, grants)}
             onSaveGrants={(grants) => { connectDemo.updateGrants(reviewRequest.id, grants); setToast("Sharing updated. Future access follows the new choice."); }}
+            onMessage={() => messageConnection(reviewRequest)}
           />
         ) : null}
         {screen === "help-offer" && helpTarget ? (
@@ -1476,6 +1645,51 @@ function HarmoniAppContent() {
               : `Hoping to swap a free weekend of tractor time for advice on drip irrigation before winter sowing.`}
             onBack={() => { setActiveTab("circles"); navigate("home", "circles"); }}
             onApprove={(ask) => connectDemo.approveMyAsk(spotlightAskCircle.id, ask)}
+          />
+        ) : null}
+        {screen === "messages" ? (
+          <MessagesInboxScreen
+            threads={messagingDemo.threads}
+            circleName={(id) => findCircle(id)?.name ?? "Circle"}
+            accessFor={threadAccess}
+            onOpen={(id) => openThread(id, "messages")}
+            onBack={leaveMessages}
+          />
+        ) : null}
+        {screen === "thread" && activeThread ? (
+          <ThreadScreen
+            key={activeThread.id}
+            thread={activeThread}
+            circleName={findCircle(activeThread.circleId)?.name ?? "Circle"}
+            access={threadAccess(activeThread)}
+            online={messagingDemo.online}
+            onBack={() => threadReturn === "home" ? (setActiveTab(messagesReturnTab), navigate("home", messagesReturnTab)) : navigate(threadReturn)}
+            onSend={(text) => { if (threadAccess(activeThread).allowed) messagingDemo.send(activeThread.id, text); }}
+            onRetry={(messageId) => { if (threadAccess(activeThread).allowed) messagingDemo.retry(activeThread.id, messageId); }}
+            onDelete={(messageId) => messagingDemo.deleteMessage(activeThread.id, messageId)}
+            onToggleOnline={() => {
+              messagingDemo.setOnline(!messagingDemo.online);
+              setToast(messagingDemo.online ? "Demo: connection lost." : "Reconnected. Retry any messages that didn’t send.");
+            }}
+            onMute={(muted) => { messagingDemo.setMuted(activeThread.id, muted); setToast(muted ? "Alerts muted for this conversation." : "Alerts back on."); }}
+            onHide={() => { messagingDemo.setHidden(activeThread.id, true); navigate("messages"); setToast("Conversation hidden."); }}
+            onReport={() => { messagingDemo.report(activeThread.id); setToast("Reported to Harmoni’s safety team. Demo only."); }}
+            onBlock={(blocked) => { messagingDemo.setBlocked(activeThread.id, blocked); setToast(blocked ? `${activeThread.name.split(" ")[0]} is blocked.` : "Unblocked."); }}
+            onWithdraw={() => {
+              const request = connectDemo.requests.find((item) => item.id === activeThread.requestId) ?? connectDemo.connectionWith(activeThread.personId);
+              if (request) connectDemo.withdraw(request.id);
+              setToast("Connection withdrawn. Messaging has stopped.");
+            }}
+            onEscalate={() => { messagingDemo.escalate(activeThread.id); setToast("Escalation requested."); }}
+          />
+        ) : null}
+        {screen === "notification-settings" ? (
+          <NotificationSettingsScreen
+            demo={notificationsDemo}
+            circles={circleDemo.circles.filter((circle) => circle.status === "active" || circle.role === "host")}
+            email={profile.email}
+            alertHref="/?alert=n-neha"
+            onBack={() => { setActiveTab("notifications"); navigate("home", "notifications"); }}
           />
         ) : null}
         {screen === "details" ? (
@@ -1588,6 +1802,8 @@ function HarmoniAppContent() {
           <>
             {!(activeTab === "contacts" && contactView) ? (
               <AppHeader
+                onMessages={openMessages}
+                unreadMessages={unreadMessages}
                 onMenu={() => setSheet("menu")}
                 onSetup={() => setSheet("setup")}
                 onEdit={() => openDesign("home")}
@@ -1678,10 +1894,26 @@ function HarmoniAppContent() {
                 onAskHelp={() => openConnectView("help-request")}
                 onBuildPersona={() => activePersona ? addMorePersonaContext(activePersona) : startPersonaFlow("home")}
                 onDiscover={() => { circleDemo.setSegment("discover"); setCircleRoute({ name: "home" }); changeTab("circles"); }}
+                onMessage={messageConnection}
                 onToast={setToast}
               />
             ) : null}
-            {activeTab === "notifications" ? <NotificationsLandingScreen /> : null}
+            {activeTab === "notifications" ? (
+              <NotificationsScreen
+                demo={notificationsDemo}
+                resolve={resolveNotification}
+                unreadMessages={unreadMessages}
+                onOpen={openNotification}
+                onOpenGroup={(ids) => {
+                  ids.forEach((id) => notificationsDemo.markRead(id));
+                  connectDemo.setSegment("requests");
+                  connectDemo.setRequestFilter("incoming");
+                  changeTab("matches");
+                }}
+                onMessages={openMessages}
+                onSettings={() => navigate("notification-settings")}
+              />
+            ) : null}
             {activeTab === "circles" && circleRoute.name === "home" ? (
               <CirclesHomeScreen
                 demo={circleDemo}
@@ -1749,7 +1981,14 @@ function HarmoniAppContent() {
               />
             ) : null}
             {activeTab === "circles" && routedCircle && circleRoute.name === "hub" ? (
-              <HubStructureScreen circle={routedCircle} onBack={() => setCircleRoute({ name: "detail", id: routedCircle.id })} />
+              <HubStructureScreen
+                circle={routedCircle}
+                onBack={() => setCircleRoute({ name: "detail", id: routedCircle.id })}
+                onWrite={() => {
+                  const hubThread = messagingDemo.threads.find((thread) => thread.kind === "hub" && thread.circleId === routedCircle.id);
+                  if (hubThread) openThread(hubThread.id);
+                }}
+              />
             ) : null}
             {activeTab === "circles" && routedCircle && circleRoute.name === "spotlight" ? (
               <SpotlightManagerScreen
@@ -1808,7 +2047,7 @@ function HarmoniAppContent() {
           </>
         ) : null}
       </main>
-      {screen === "home" && !contactView ? <BottomNav active={activeTab} onChange={changeTab} /> : null}
+      {screen === "home" && !contactView ? <BottomNav active={activeTab} onChange={changeTab} badges={{ notifications: unreadNotifications }} /> : null}
       {sheet === "menu" ? (
         <MenuSheet onDismiss={() => setSheet(null)} onAction={handleMenuAction} onShare={() => void shareCard()} />
       ) : null}

@@ -132,6 +132,8 @@ const SAMPLE_MATCHES: DemoMatch[] = [
 
 const SAMPLE_REQUESTS: ConnRequest[] = [
   { id: "rq-neha", personId: "neha", name: "Neha Kapoor", direction: "incoming", kind: "interest", circleId: "sunday-builders", persona: "Business", note: "Would love a quick review of my onboarding flow.", status: "pending", at: "1h ago", eligible: true },
+  { id: "rq-meera", personId: "meera", name: "Meera Das", direction: "incoming", kind: "interest", circleId: "sunday-builders", persona: "Business", note: "I design onboarding flows and saw we overlap.", status: "pending", at: "40m ago", eligible: true },
+  { id: "rq-omar", personId: "omar", name: "Omar Sheikh", direction: "incoming", kind: "interest", circleId: "valley-growers", persona: "Main card", note: "", status: "withdrawn", at: "2 days ago", eligible: true },
   { id: "rq-tom", personId: "tom", name: "Tom Becker", direction: "incoming", kind: "introduction", circleId: "sunday-builders", persona: "Personal", note: "Hoping to chat about side-project pricing.", status: "pending", at: "5 days ago", eligible: false },
   { id: "rq-aarav", personId: "aarav", name: "Aarav Shah", direction: "sent", kind: "interest", circleId: "sunday-builders", persona: "Main card", note: "", status: "approved", at: "Sep 30", grants: { chat: true, email: false, phone: false }, eligible: true },
   { id: "rq-farah", personId: "farah", name: "Farah Ali", direction: "sent", kind: "introduction", circleId: "valley-growers", persona: "Main card", note: "", status: "declined", at: "Sep 24", eligible: true },
