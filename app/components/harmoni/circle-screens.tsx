@@ -22,6 +22,7 @@ import {
   type JoinOutcome,
 } from "./circle-data";
 import { Avatar, Icon } from "./ui";
+import { Select, plainOptions } from "./select";
 
 export type ManageSection = "requests" | "members" | "invites" | "settings" | "connections" | "insights";
 
@@ -245,11 +246,7 @@ export function CirclesHomeScreen({
               <button key={category} type="button" className={`pill${discover.category === category ? " on" : ""}`} onClick={() => setDiscover((current) => ({ ...current, category }))}>{category}</button>
             ))}
           </div>
-          <label className="p2-select-row"><Icon name="pin" size={17} /><span>Area</span>
-            <select value={discover.area} onChange={(event) => setDiscover((current) => ({ ...current, area: event.target.value }))}>
-              {CIRCLE_AREAS.map((area) => <option key={area}>{area}</option>)}
-            </select>
-          </label>
+          <Select label="Area" icon="pin" value={discover.area} onChange={(area) => setDiscover((current) => ({ ...current, area }))} options={plainOptions(CIRCLE_AREAS)} />
           {listed.map((circle) => (
             <button className="card p2-listing" type="button" key={circle.id} onClick={() => onOpenCircle(circle.id)}>
               <div className="p2-listing-head"><CircleMark circle={circle} /><span className="p2-circle-copy"><b>{circle.name}</b><small>Hosted by {circle.host} · {circle.area}</small></span><StatusPill circle={circle} /></div>
@@ -549,8 +546,8 @@ export function CreateCircleScreen({
           <p>Guests see this before they decide to answer questions or join.</p>
           <label className="f"><span>Circle name</span><input value={draft.name} onChange={(event) => set("name", event.target.value)} maxLength={50} placeholder="For example, Sunday Builders" /></label>
           <label className="p1-review-field"><span>Purpose</span><textarea className="p1-textarea p1-review-textarea" value={draft.purpose} onChange={(event) => set("purpose", event.target.value)} maxLength={240} rows={3} placeholder="Who is this for, and what do people help each other with?" /></label>
-          <label className="p2-select-row"><Icon name="circle" size={17} /><span>Category</span><select value={draft.category} onChange={(event) => set("category", event.target.value)}>{CIRCLE_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select></label>
-          <label className="p2-select-row"><Icon name="pin" size={17} /><span>Area</span><select value={draft.area} onChange={(event) => set("area", event.target.value)}>{CIRCLE_AREAS.filter((area) => area !== "Anywhere").map((area) => <option key={area}>{area}</option>)}</select></label>
+          <Select label="Category" icon="circle" value={draft.category} onChange={(category) => set("category", category)} options={plainOptions(CIRCLE_CATEGORIES)} />
+          <Select label="Area" icon="pin" value={draft.area} onChange={(area) => set("area", area)} options={plainOptions(CIRCLE_AREAS.filter((area) => area !== "Anywhere"))} />
           <label className="f"><span>Topics (comma separated)</span><input value={draft.topics} onChange={(event) => set("topics", event.target.value)} placeholder="Design, Climate, Hiring" /></label>
           <div className="p2-footer-space" />
         </>
@@ -582,9 +579,9 @@ export function CreateCircleScreen({
             <div className="card p2-fee-form">
               <div className="p2-two-col">
                 <label className="f"><span>Price</span><input inputMode="decimal" value={draft.amount} onChange={(event) => set("amount", event.target.value.replace(/[^\d.]/g, ""))} placeholder="15" /></label>
-                <label className="f"><span>Currency</span><select className="p2-select" value={draft.currency} onChange={(event) => set("currency", event.target.value)}>{["USD", "INR", "EUR", "GBP"].map((currency) => <option key={currency}>{currency}</option>)}</select></label>
+                <Select variant="field" label="Currency" value={draft.currency} onChange={(currency) => set("currency", currency)} options={plainOptions(["USD", "INR", "EUR", "GBP"])} />
               </div>
-              <label className="f"><span>Billing</span><select className="p2-select" value={draft.basis} onChange={(event) => set("basis", event.target.value as CircleDraft["basis"])}><option value="month">Monthly</option><option value="year">Yearly</option><option value="once">One-time</option></select></label>
+              <Select variant="field" label="Billing" value={draft.basis} onChange={(basis) => set("basis", basis)} options={[{ value: "month", label: "Monthly" }, { value: "year", label: "Yearly" }, { value: "once", label: "One-time" }]} />
               <label className="p1-review-field"><span>Terms shown before anyone commits</span><textarea className="p1-textarea p1-review-textarea" value={draft.terms} onChange={(event) => set("terms", event.target.value)} rows={2} maxLength={240} placeholder="Renewal, cancellation and refund terms" /></label>
               <div className="card p2-warning"><b>Paid circles publish later</b><p>Payment collection, payouts, refunds and receipts still need approval. You can save a paid circle as a draft now; it can’t publish until collection works.{draft.admission === "approval" ? " Members will pay only after you approve them." : ""}</p></div>
             </div>
@@ -761,7 +758,7 @@ export function ManageCircleScreen({
             <b>Invite one person by email</b>
             <p className="p2-fine">A personal invitation for one person. They become a member only if they accept, and we never import their profile.</p>
             <label className="f"><span>Email</span><input type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="name@example.com" /></label>
-            <label className="p2-select-row"><span>Expires</span><select value={inviteExpiry} onChange={(event) => setInviteExpiry(event.target.value as InviteExpiry)}>{INVITE_EXPIRY_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label>
+            <Select label="Expires" value={inviteExpiry} onChange={setInviteExpiry} options={plainOptions<InviteExpiry>(INVITE_EXPIRY_OPTIONS)} />
             <button className="btn s" type="submit" disabled={!/^\S+@\S+\.\S+$/.test(inviteEmail) || hubInactive}>Send invitation</button>
           </form>
           <h2 className="p1-section-title">Invitations</h2>
@@ -775,7 +772,7 @@ export function ManageCircleScreen({
             ))}
             {!circle.invitations.length ? <p className="p2-fine p2-list-note">No invitations yet.</p> : null}
           </div>
-          <label className="p2-select-row p6-link-expiry"><span>New link expires</span><select value={linkExpiry} onChange={(event) => setLinkExpiry(event.target.value as InviteExpiry)}>{INVITE_EXPIRY_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></label>
+          <Select className="p6-link-expiry" label="New link expires" value={linkExpiry} onChange={setLinkExpiry} options={plainOptions<InviteExpiry>(INVITE_EXPIRY_OPTIONS)} />
           <button className="btn g s" type="button" onClick={() => { demo.regenerateLink(circle.id, linkExpiry); onToast("New link and join code created. The old ones stopped working."); }}>Replace reusable link and code</button>
           <p className="p2-fine">Reusable links and join codes can be used by anyone who has them; opening one isn’t admission. Who can invite: {circle.settings.whoCanInvite === "host" ? "only you" : "any active member"}.</p>
         </>
@@ -843,9 +840,9 @@ export function ManageCircleScreen({
           </div>
           <h2 className="p1-section-title">Spotlight</h2>
           <div className="card p2-spotlight-settings">
-            <label className="p2-select-row"><span>Slot length</span><select value={settings.spotlightSlot} onChange={(event) => setSettings((current) => ({ ...current, spotlightSlot: event.target.value as HostSettings["spotlightSlot"] }))}><option value="day">One day</option><option value="week">One week</option><option value="month">One month</option></select></label>
-            <label className="p2-select-row"><span>Selection</span><select value={settings.spotlightSelection} onChange={(event) => setSettings((current) => ({ ...current, spotlightSelection: event.target.value as HostSettings["spotlightSelection"] }))}><option value="host">Host picks from opt-in queue</option><option value="random">Random from opt-in queue</option></select></label>
-            <label className="p2-select-row"><span>Offers go to</span><select value={settings.spotlightResponse} onChange={(event) => setSettings((current) => ({ ...current, spotlightResponse: event.target.value as HostSettings["spotlightResponse"] }))}><option value="member">The featured member</option><option value="host">Host first</option></select></label>
+            <Select label="Slot length" value={settings.spotlightSlot} onChange={(spotlightSlot) => setSettings((current) => ({ ...current, spotlightSlot }))} options={[{ value: "day", label: "One day" }, { value: "week", label: "One week" }, { value: "month", label: "One month" }]} />
+            <Select label="Selection" value={settings.spotlightSelection} onChange={(spotlightSelection) => setSettings((current) => ({ ...current, spotlightSelection }))} options={[{ value: "host", label: "Host picks from queue" }, { value: "random", label: "Random from queue" }]} />
+            <Select label="Offers go to" value={settings.spotlightResponse} onChange={(spotlightResponse) => setSettings((current) => ({ ...current, spotlightResponse }))} options={[{ value: "member", label: "Featured member" }, { value: "host", label: "Host first" }]} />
             <p className="p2-fine">Members choose their own alert channels and how often they hear about Spotlights.</p>
           </div>
           {broadening ? <div className="card p2-warning"><b>This widens who can see the circle</b><p>Existing members keep their current sharing choices. Nothing they’ve shared becomes more visible unless they agree.</p></div> : null}

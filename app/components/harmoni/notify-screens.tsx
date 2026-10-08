@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { DemoCircle } from "./circle-data";
 import { CATEGORY_LABELS, type Cadence, type DemoNotification, type NotificationCategory, type NotificationsDemo } from "./notify-data";
 import { Icon, type IconName } from "./ui";
+import { Select, plainOptions } from "./select";
 
 const CATEGORY_ICONS: Record<NotificationCategory, IconName> = {
   interest: "person",
@@ -174,12 +175,13 @@ export function NotificationSettingsScreen({
           <b>In Harmoni only</b>
         </div>
         {(Object.keys(CATEGORY_LABELS) as NotificationCategory[]).filter((category) => category !== "interest").map((category) => (
-          <label className="p2-select-row" key={category}>
-            <span>{CATEGORY_LABELS[category]}</span>
-            <select value={prefs.categories[category]} onChange={(event) => setPrefs((current) => ({ ...current, categories: { ...current.categories, [category]: event.target.value as Cadence } }))}>
-              {(Object.keys(CADENCE_LABELS) as Cadence[]).filter((cadence) => category !== "message" || cadence !== "digest").map((cadence) => <option key={cadence} value={cadence}>{CADENCE_LABELS[cadence]}</option>)}
-            </select>
-          </label>
+          <Select
+            key={category}
+            label={CATEGORY_LABELS[category]}
+            value={prefs.categories[category]}
+            onChange={(cadence) => setPrefs((current) => ({ ...current, categories: { ...current.categories, [category]: cadence } }))}
+            options={(Object.keys(CADENCE_LABELS) as Cadence[]).filter((cadence) => category !== "message" || cadence !== "digest").map((cadence) => ({ value: cadence, label: CADENCE_LABELS[cadence] }))}
+          />
         ))}
       </div>
       <p className="p2-fine">Connection requests are shown live in Harmoni, not by email. Offline alerts for them need separate confirmation. Several updates close together are grouped, and turning a type off still keeps it here in Harmoni.</p>
@@ -192,8 +194,8 @@ export function NotificationSettingsScreen({
         </div>
         {prefs.quietHours.on ? (
           <div className="p2-two-col">
-            <label className="p2-select-row"><span>From</span><select value={prefs.quietHours.from} onChange={(event) => setPrefs((current) => ({ ...current, quietHours: { ...current.quietHours, from: event.target.value } }))}>{HOURS.map((hour) => <option key={hour}>{hour}</option>)}</select></label>
-            <label className="p2-select-row"><span>To</span><select value={prefs.quietHours.to} onChange={(event) => setPrefs((current) => ({ ...current, quietHours: { ...current.quietHours, to: event.target.value } }))}>{HOURS.map((hour) => <option key={hour}>{hour}</option>)}</select></label>
+            <Select label="From" value={prefs.quietHours.from} onChange={(from) => setPrefs((current) => ({ ...current, quietHours: { ...current.quietHours, from } }))} options={plainOptions(HOURS)} />
+            <Select label="To" value={prefs.quietHours.to} onChange={(to) => setPrefs((current) => ({ ...current, quietHours: { ...current.quietHours, to } }))} options={plainOptions(HOURS)} />
           </div>
         ) : null}
       </div>

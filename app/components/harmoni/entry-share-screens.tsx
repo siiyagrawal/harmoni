@@ -4,6 +4,7 @@ import DigitalCard from "./digital-card";
 import type { CapturedCard, CaptureStatus } from "./circle-data";
 import type { PersonaPreview, Profile } from "./types";
 import { Icon, QrCode } from "./ui";
+import { Select } from "./select";
 
 export type EntryDestination = { id: string; name: string; code: string | null; url: string | null };
 
@@ -71,11 +72,7 @@ export function ShareEntryScreen({
       </div>
       {!personas.length ? <p className="p2-fine">Create a business, singles or custom persona under You to share a different card.</p> : null}
       <h2 className="p1-section-title">Destination circle</h2>
-      <label className="p2-select-row"><Icon name="circle" size={17} /><span>Circle</span>
-        <select value={destination?.id} onChange={(event) => setDestinationId(event.target.value)}>
-          {destinations.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
-        </select>
-      </label>
+      <Select label="Circle" icon="circle" value={destination?.id ?? ""} onChange={setDestinationId} options={destinations.map((item) => ({ value: item.id, label: item.name }))} />
       <h2 className="p1-section-title">Preview</h2>
       {personaId === "main" || !persona ? (
         <DigitalCard profile={profile} level="Level 1" />

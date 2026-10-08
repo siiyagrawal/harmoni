@@ -3,6 +3,7 @@ import type { CircleDemo } from "./circle-data";
 import type { AdminDemo, AdminUser } from "./impact-data";
 import { FunnelChart, StatTiles, Suggestions } from "./analytics-ui";
 import { Avatar, Icon } from "./ui";
+import { Select, plainOptions } from "./select";
 import { OperationsPanel } from "./operations-panel";
 
 // Reason-gated action: every admin decision records why, and lands in the audit log.
@@ -184,11 +185,7 @@ export function AdminScreen({ admin, circleDemo, onBack, onToast }: { admin: Adm
               {openUser === user.id ? (
                 <div className="p5-user-detail">
                   <p className="p2-fine">Account details only: {user.email} · {user.circles} circles. Personas, dossier drafts and messages aren’t viewable here.</p>
-                  <label className="p2-select-row"><span>Role</span>
-                    <select value={user.role} onChange={(event) => admin.setUserRole(user.id, event.target.value as AdminUser["role"])}>
-                      {["Member", "Moderator", "Support", "Super Admin"].map((role) => <option key={role}>{role}</option>)}
-                    </select>
-                  </label>
+                  <Select label="Role" value={user.role} onChange={(role) => admin.setUserRole(user.id, role)} options={plainOptions<AdminUser["role"]>(["Member", "Moderator", "Support", "Super Admin"])} />
                   <div className="p2-inline-row">
                     {user.status === "active" ? <ReasonAction label="Suspend" confirm="Suspend account" danger onConfirm={(reason) => admin.setUserStatus(user.id, "suspended", reason)} /> : <ReasonAction label="Restore" confirm="Restore account" onConfirm={(reason) => admin.setUserStatus(user.id, "active", reason)} />}
                     {user.status !== "removal-review" ? <ReasonAction label="Request removal" confirm="Send for review" danger onConfirm={(reason) => { admin.setUserStatus(user.id, "removal-review", reason); onToast("Removal needs a second admin to approve."); }} /> : null}
@@ -233,16 +230,8 @@ export function AdminScreen({ admin, circleDemo, onBack, onToast }: { admin: Adm
           <div className="card p5-admin-card">
             <b>Send an operational notice</b>
             <p className="p2-fine">Service and safety updates only, not marketing. Members’ alert preferences still apply.</p>
-            <label className="p2-select-row"><span>To</span>
-              <select value={notice.audience} onChange={(event) => setNotice((current) => ({ ...current, audience: event.target.value }))}>
-                {["All users", "Circle hosts", "Hub admins", "Members of Valley Growers Co-op"].map((audience) => <option key={audience}>{audience}</option>)}
-              </select>
-            </label>
-            <label className="p2-select-row"><span>Channel</span>
-              <select value={notice.channel} onChange={(event) => setNotice((current) => ({ ...current, channel: event.target.value }))}>
-                {["In-app", "In-app and email"].map((channel) => <option key={channel}>{channel}</option>)}
-              </select>
-            </label>
+            <Select label="To" value={notice.audience} onChange={(audience) => setNotice((current) => ({ ...current, audience }))} options={plainOptions(["All users", "Circle hosts", "Hub admins", "Members of Valley Growers Co-op"])} />
+            <Select label="Channel" value={notice.channel} onChange={(channel) => setNotice((current) => ({ ...current, channel }))} options={plainOptions(["In-app", "In-app and email"])} />
             <textarea className="p1-textarea p1-review-textarea" value={notice.text} onChange={(event) => setNotice((current) => ({ ...current, text: event.target.value }))} rows={3} maxLength={280} placeholder="Planned maintenance on Sunday 02:00–03:00 IST…" aria-label="Notice text" />
             <button className="btn s p5-send-notice" type="button" disabled={notice.text.trim().length < 10} onClick={() => { admin.sendNotice(notice.audience, notice.channel, notice.text); setNotice((current) => ({ ...current, text: "" })); onToast("Notice queued. Demo only: nothing is sent."); }}>Send notice</button>
           </div>

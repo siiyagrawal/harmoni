@@ -7,6 +7,7 @@ import DigitalCard from "./digital-card";
 import type { Contact, Profile, ProfileField } from "./types";
 import { CARD_ARTS } from "./types";
 import { Avatar, CardArtwork, Icon, ProgressRing } from "./ui";
+import { Select } from "./select";
 
 type TextField = "name" | "title" | "company" | "headline" | "email" | "phone";
 
@@ -530,9 +531,13 @@ export function DesignScreen({
               <div className="persona-item" key={item._id}>
                 <input value={personaDrafts[String(item._id)] ?? item.text} aria-label={title + " context"} onChange={(event) => setPersonaDrafts((current) => ({ ...current, [String(item._id)]: event.target.value }))} />
                 {personaDrafts[String(item._id)] !== undefined && personaDrafts[String(item._id)] !== item.text ? <button className="pill" type="button" onClick={() => { onUpdatePersonaItem(item._id, personaDrafts[String(item._id)] ?? item.text); setPersonaDrafts((current) => { const next = { ...current }; delete next[String(item._id)]; return next; }); }}>Save</button> : null}
-                <select className="pill" value={item.visibility} aria-label="Context visibility" onChange={(event) => onSetPersonaVisibility(item._id, event.target.value as "private" | "connections" | "circle" | "custom")}>
-                  <option value="private">Private</option><option value="connections">Connections</option><option value="circle">Circle</option><option value="custom">Custom</option>
-                </select>
+                <Select
+                  variant="pill"
+                  ariaLabel="Context visibility"
+                  value={item.visibility}
+                  onChange={(visibility) => onSetPersonaVisibility(item._id, visibility)}
+                  options={[{ value: "private", label: "Private" }, { value: "connections", label: "Connections" }, { value: "circle", label: "Circle" }, { value: "custom", label: "Custom" }]}
+                />
                 <span className="tag">{item.status}</span>
                 {item.status === "draft" ? <button className="pill" type="button" onClick={() => onApprovePersonaItem(item._id)}>Approve</button> : null}
                 {item.status !== "archived" ? <button className="pill" type="button" onClick={() => onArchivePersonaItem(item._id)}>Archive</button> : null}

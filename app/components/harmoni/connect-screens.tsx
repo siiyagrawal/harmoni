@@ -4,6 +4,7 @@ import type { DemoCircle } from "./circle-data";
 import type { ConnectDemo, ConnRequest, DemoMatch, FitLevel, Grants, HelpOffer, RequestKind } from "./connect-data";
 import type { PersonaType } from "./types";
 import { Avatar, Icon } from "./ui";
+import { Select, plainOptions } from "./select";
 
 export type PersonaOption = { name: string; type: PersonaType | "main" };
 export type HelpTarget = { type: "spotlight" | "help"; id: string; label: string; ask: string; ownerId: string; owner: string; circleId: string };
@@ -114,17 +115,8 @@ export function MatchesHubScreen({
       {segment === "matches" ? (
         <>
           <div className="card p3-scope">
-            <label className="p2-select-row"><Icon name="person" size={17} /><span>Matching as</span>
-              <select value={persona.name} onChange={(event) => setMatchScope((current) => ({ ...current, persona: event.target.value }))}>
-                {personas.map((item) => <option key={item.name}>{item.name}</option>)}
-              </select>
-            </label>
-            <label className="p2-select-row"><Icon name="circle" size={17} /><span>In</span>
-              <select value={matchScope.circleId} onChange={(event) => setMatchScope((current) => ({ ...current, circleId: event.target.value }))}>
-                <option value="all">All my circles</option>
-                {activeCircles.map((circle) => <option key={circle.id} value={circle.id}>{circle.name}</option>)}
-              </select>
-            </label>
+            <Select label="Matching as" icon="person" value={persona.name} onChange={(value) => setMatchScope((current) => ({ ...current, persona: value }))} options={plainOptions(personas.map((item) => item.name))} />
+            <Select label="In" icon="circle" value={matchScope.circleId} onChange={(value) => setMatchScope((current) => ({ ...current, circleId: value }))} options={[{ value: "all", label: "All my circles" }, ...activeCircles.map((circle) => ({ value: circle.id, label: circle.name }))]} />
             <div className="p3-refresh-row">
               <span className="tag">{refreshing ? "Refreshing…" : stale ? "Your context changed" : "Updated from approved context"}</span>
               <button className="pill" type="button" onClick={() => setRefreshing(true)} disabled={refreshing}>Refresh</button>
@@ -658,9 +650,7 @@ export function HelpRequestScreen({
       <p>Ask anytime. Members who can help send an offer, and you decide who to connect with.</p>
       {circles.length ? (
         <>
-          <label className="p2-select-row"><Icon name="circle" size={17} /><span>Ask in</span>
-            <select value={circleId} onChange={(event) => setCircleId(event.target.value)}>{circles.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
-          </label>
+          <Select label="Ask in" icon="circle" value={circleId} onChange={setCircleId} options={circles.map((item) => ({ value: item.id, label: item.name }))} />
           <label className="p1-review-field"><span>Your ask</span><textarea className="p1-textarea" value={ask} onChange={(event) => setAsk(event.target.value)} rows={4} maxLength={240} placeholder="Be specific: what, where, and what a good outcome looks like" /></label>
           <label className="f"><span>Timing (optional)</span><input value={timing} onChange={(event) => setTiming(event.target.value)} placeholder="This week, before Oct 18…" maxLength={40} /></label>
           <div className="card p1-static-notice p2-bottom-space"><b>Who sees it</b><p>Active members of {circle?.name} see your ask with your {persona} persona name. Your contact details and other personas aren’t shown.</p></div>
